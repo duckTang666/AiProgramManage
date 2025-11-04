@@ -180,6 +180,53 @@
               </div>
             </div>
           </div>
+
+          <!-- 所有活跃项目 -->
+          <div class="card p-6 mt-6">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">所有活跃项目</h3>
+              <span class="text-sm text-gray-500">{{ activeProjects.length }} 个项目</span>
+            </div>
+            <div class="space-y-4">
+              <div v-for="project in activeProjects" :key="project.id" class="p-4 border border-gray-200 rounded-lg hover:border-green-300 transition-colors">
+                <div class="flex justify-between items-start mb-2">
+                  <h4 class="font-medium text-gray-900">{{ project.name }}</h4>
+                  <div class="flex items-center space-x-2">
+                    <span class="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      活跃中
+                    </span>
+                    <span :class="[
+                      'px-2 py-1 rounded-full text-xs font-medium',
+                      project.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+                      project.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                      project.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-blue-100 text-blue-800'
+                    ]">
+                      {{ project.priority === 'urgent' ? '紧急' : project.priority === 'high' ? '高' : project.priority === 'medium' ? '中' : '低' }}
+                    </span>
+                  </div>
+                </div>
+                <p class="text-sm text-gray-600 mb-3">{{ project.description }}</p>
+                <div class="flex justify-between items-center">
+                  <div class="flex-1 mr-4">
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                      <div class="bg-green-600 h-2 rounded-full" :style="{ width: project.progress_percentage + '%' }"></div>
+                    </div>
+                  </div>
+                  <div class="text-xs text-gray-500">
+                    <span>{{ project.progress_percentage }}%</span>
+                  </div>
+                </div>
+                <div class="flex justify-between items-center text-xs text-gray-500 mt-2">
+                  <span>开始: {{ formatDate(project.start_date || project.created_at) }}</span>
+                  <span v-if="project.end_date">截止: {{ formatDate(project.end_date) }}</span>
+                </div>
+              </div>
+              <div v-if="activeProjects.length === 0" class="text-center py-8 text-gray-500">
+                <p>暂无活跃项目</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- 右侧边栏 -->
@@ -222,6 +269,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useOrganizationStore } from '@/stores/organization'
 import { useProjectStore } from '@/stores/project'
 import { UserService, TaskService, ChatService, DashboardService } from '@/lib/database'
+import { supabase } from '@/lib/supabase'
 
 // 类型定义
 interface Project {
@@ -289,6 +337,9 @@ const stats = ref({
 // 最近项目
 const recentProjects = ref<Project[]>([])
 
+// 所有活跃项目
+const activeProjects = ref<Project[]>([])
+
 // AI建议
 const aiSuggestions = ref<Message[]>([])
 
@@ -300,6 +351,38 @@ const errorMessage = ref('')
 // 格式化日期
 const formatDate = (dateString: string) => {
   return new Date(dateString).toLocaleDateString('zh-CN')
+}
+
+// 获取数据库中的用户ID
+async function getDatabaseUserId(): Promise<number | null> {
+  try {
+    const userEmail = authStore.user?.email
+    
+    if (!userEmail) {
+      console.log('用户邮箱为空，无法查询数据库用户ID')
+      return null
+    }
+    
+    console.log('🔍 开始查询数据库用户ID，邮箱:', userEmail)
+    
+    // 直接使用email查询用户ID（不依赖auth_id列）
+    const { data: emailData, error: emailError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', userEmail)
+      .single()
+    
+    if (!emailError && emailData) {
+      console.log('✅ 通过email查询到用户ID:', emailData.id)
+      return emailData.id
+    }
+    
+    console.log('❌ 通过email查询失败:', emailError?.message)
+    return null
+  } catch (error) {
+    console.error('获取数据库用户ID失败:', error)
+    return null
+  }
 }
 
 // 退出登录
@@ -364,28 +447,61 @@ async function createNewProject() {
 // 加载用户档案
 async function loadUserProfile() {
   try {
-    const userId = authStore.user?.id
-    if (!userId) {
-      console.log('用户ID为空，跳过用户档案加载')
+    const userEmail = authStore.user?.email
+    
+    if (!userEmail) {
+      console.log('用户邮箱为空，跳过用户档案加载')
       return
     }
 
     loadingMessage.value = '正在加载用户信息...'
-    userProfile.value = await UserService.getUserByAuthId(userId)
+    
+    console.log('🔍 开始加载用户档案，邮箱:', userEmail)
+    
+    // 直接使用email查询用户档案（不依赖auth_id列）
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', userEmail)
+      .single()
+    
+    if (error) {
+      // 如果查询失败，检查是否是表不存在
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+        console.warn('用户表不存在，请先执行数据库初始化')
+        // 创建默认用户档案对象
+        userProfile.value = {
+          display_name: authStore.user?.email?.split('@')[0] || '用户',
+          role: 'member',
+          is_active: true
+        }
+        return
+      }
+      
+      // 如果是记录不存在错误，创建默认档案
+      if (error.code === 'PGRST116') {
+        console.warn('用户记录不存在，创建默认档案')
+        userProfile.value = {
+          display_name: authStore.user?.email?.split('@')[0] || '用户',
+          role: 'member',
+          is_active: true
+        }
+        return
+      }
+      
+      throw error
+    }
+    
+    userProfile.value = data
     console.log('✅ 用户档案加载成功:', userProfile.value)
   } catch (error: any) {
     console.error('加载用户档案失败:', error)
     
-    // 如果是表不存在错误，提示用户执行数据库初始化
-    if (error?.code === 'PGRST116' || error?.message?.includes('does not exist')) {
-      errorMessage.value = '用户档案表不存在，请先执行数据库初始化脚本'
-    } else {
-      // 创建默认用户档案对象
-      userProfile.value = {
-        display_name: authStore.user?.email?.split('@')[0] || '用户',
-        role: 'member',
-        is_active: true
-      }
+    // 创建默认用户档案对象
+    userProfile.value = {
+      display_name: authStore.user?.email?.split('@')[0] || '用户',
+      role: 'member',
+      is_active: true
     }
   }
 }
@@ -394,50 +510,147 @@ async function loadUserProfile() {
 async function loadStats() {
   try {
     const userId = authStore.user?.id
-    if (!userId) {
-      console.log('用户ID为空，跳过数据加载')
+    const userEmail = authStore.user?.email
+    
+    if (!userId && !userEmail) {
+      console.log('用户ID和邮箱都为空，跳过数据加载')
       return
     }
 
     loadingMessage.value = '正在加载统计数据...'
     
-    // 首先获取数据库用户ID
-    const userProfile = await UserService.getUserByAuthId(userId)
-    if (!userProfile?.id) {
-      console.log('未找到数据库用户ID，跳过统计数据加载')
+    console.log('🔍 开始加载统计数据，认证ID:', userId, '邮箱:', userEmail)
+    
+    // 直接使用Supabase查询统计数据，避免复杂的服务调用
+    
+    // 1. 获取用户所属的组织数量
+    // 首先需要获取数据库中的用户ID
+    const dbUserId = await getDatabaseUserId()
+    if (!dbUserId) {
+      console.log('无法获取数据库用户ID，跳过数据加载')
+      
+      // 使用默认数据
+      stats.value = {
+        activeProjects: 0,
+        pendingTasks: 0,
+        organizations: 0,
+        aiChats: 0
+      }
       return
     }
     
-    const dbUserId = userProfile.id
+    console.log('✅ 获取到数据库用户ID:', dbUserId)
     
-    // 使用Dashboard服务获取统计数据
-    const dashboardStats = await DashboardService.getDashboardStats(dbUserId)
+    // 获取用户所属的组织（包括作为成员和作为所有者的组织）
+    const [
+      { data: userOrgs, error: orgsError },
+      { data: ownedOrgs, error: ownedOrgsError }
+    ] = await Promise.all([
+      supabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', dbUserId),
+      supabase
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', dbUserId)
+    ])
     
-    // 加载组织数据用于显示组织数量
-    await organizationStore.fetchOrganizations(dbUserId)
+    if (orgsError && ownedOrgsError) {
+      console.error('查询组织关系失败:', orgsError, ownedOrgsError)
+      // 如果表不存在，使用默认数据
+      if (orgsError.message?.includes('does not exist') || ownedOrgsError.message?.includes('does not exist')) {
+        console.warn('组织相关表不存在，使用默认数据')
+        stats.value = {
+          activeProjects: 0,
+          pendingTasks: 0,
+          organizations: 0,
+          aiChats: 0
+        }
+        return
+      }
+      throw orgsError
+    }
+    
+    // 合并用户作为成员的组织和作为所有者的组织
+    const memberOrgIds = userOrgs?.map(org => org.organization_id) || []
+    const ownedOrgIds = ownedOrgs?.map(org => org.id) || []
+    const organizationIds = [...new Set([...memberOrgIds, ...ownedOrgIds])]
+    
+    console.log('✅ 用户所属组织数量:', organizationIds.length)
+    console.log('📊 组织详情:', {
+      '作为成员的组织': memberOrgIds,
+      '作为所有者的组织': ownedOrgIds,
+      '合并后的组织': organizationIds
+    })
+    
+    // 2. 获取活跃项目数量
+    let activeProjects = 0
+    if (organizationIds.length > 0) {
+      const { data: projects, error: projectsError } = await supabase
+        .from('projects')
+        .select('id')
+        .in('organization_id', organizationIds)
+        .eq('status', 'active')
+      
+      if (projectsError) {
+        console.error('查询活跃项目失败:', projectsError)
+        // 如果表不存在，跳过此统计
+        if (projectsError.message?.includes('does not exist')) {
+          console.warn('projects表不存在，跳过项目统计')
+        }
+      } else {
+        activeProjects = projects?.length || 0
+      }
+    }
+    
+    // 3. 获取待办任务数量
+    let pendingTasks = 0
+    if (organizationIds.length > 0) {
+      const { data: tasks, error: tasksError } = await supabase
+        .from('tasks')
+        .select('id')
+        .in('status', ['todo', 'in_progress'])
+      
+      if (tasksError) {
+        console.error('查询待办任务失败:', tasksError)
+        // 如果表不存在，跳过此统计
+        if (tasksError.message?.includes('does not exist')) {
+          console.warn('tasks表不存在，跳过任务统计')
+        }
+      } else {
+        pendingTasks = tasks?.length || 0
+      }
+    }
+    
+    // 4. 获取AI对话数量
+    let aiChatsCount = 0
+    const { data: aiChats, error: aiChatsError } = await supabase
+      .from('chat_history')
+      .select('id')
+      .eq('user_id', dbUserId)
+    
+    if (aiChatsError) {
+      console.error('查询AI对话失败:', aiChatsError)
+      // 如果表不存在，跳过此统计
+      if (aiChatsError.message?.includes('does not exist')) {
+        console.warn('chat_history表不存在，跳过AI对话统计')
+      }
+    } else {
+      aiChatsCount = aiChats?.length || 0
+    }
     
     stats.value = {
-      activeProjects: dashboardStats.activeProjects,
-      pendingTasks: dashboardStats.pendingTasks,
-      organizations: organizationStore.organizations.length,
-      aiChats: dashboardStats.aiChats
+      activeProjects: activeProjects,
+      pendingTasks: pendingTasks,
+      organizations: organizationIds.length,
+      aiChats: aiChatsCount
     }
     
     console.log('✅ 统计数据加载完成:', stats.value)
     
   } catch (error: any) {
     console.error('加载统计数据失败:', error)
-    
-    // 根据错误类型设置错误消息
-    if (error?.code === 'PGRST116' || error?.message?.includes('does not exist')) {
-      errorMessage.value = '数据库表不存在，请先执行数据库初始化脚本'
-    } else if (error?.message?.includes('JWT')) {
-      errorMessage.value = '认证令牌失效，请重新登录'
-    } else if (error?.message?.includes('network') || error?.message?.includes('fetch')) {
-      errorMessage.value = '网络连接失败，请检查网络设置'
-    } else {
-      errorMessage.value = `数据加载失败: ${error.message}`
-    }
     
     // 使用默认数据
     stats.value = {
@@ -453,29 +666,166 @@ async function loadStats() {
 async function loadRecentProjects() {
   try {
     const userId = authStore.user?.id
-    if (!userId) {
-      console.log('用户ID为空，跳过最近项目加载')
+    const userEmail = authStore.user?.email
+    
+    if (!userId && !userEmail) {
+      console.log('用户ID和邮箱都为空，跳过最近项目加载')
+      recentProjects.value = []
       return
     }
 
-    // 首先获取数据库用户ID
-    const userProfile = await UserService.getUserByAuthId(userId)
-    if (!userProfile?.id) {
-      console.log('未找到数据库用户ID，跳过最近项目加载')
+    console.log('🔍 开始加载最近项目，认证ID:', userId, '邮箱:', userEmail)
+    
+    // 直接使用Supabase查询最近项目，避免复杂的服务调用
+    
+    // 1. 获取用户所属的组织
+    const dbUserId = await getDatabaseUserId()
+    if (!dbUserId) {
+      console.log('无法获取数据库用户ID，跳过最近项目加载')
+      recentProjects.value = []
       return
     }
     
-    const dbUserId = userProfile.id
-
-    // 使用Dashboard服务获取最近项目
-    const recentProjectsData = await DashboardService.getRecentProjects(dbUserId, 5)
-    recentProjects.value = recentProjectsData || []
-      
+    console.log('✅ 获取到数据库用户ID:', dbUserId)
+    
+    // 获取用户所属的组织
+    const { data: userOrgs, error: orgsError } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', dbUserId)
+    
+    if (orgsError) {
+      console.error('查询组织成员关系失败:', orgsError)
+      // 如果表不存在，返回空数组
+      if (orgsError.message?.includes('does not exist')) {
+        console.warn('organization_members表不存在，返回空项目列表')
+        recentProjects.value = []
+        return
+      }
+      recentProjects.value = []
+      return
+    }
+    
+    const organizationIds = userOrgs?.map(org => org.organization_id) || []
+    console.log('✅ 用户所属组织数量:', organizationIds.length)
+    
+    // 2. 如果用户没有组织，返回空数组
+    if (organizationIds.length === 0) {
+      recentProjects.value = []
+      console.log('用户没有组织，返回空项目列表')
+      return
+    }
+    
+    // 3. 获取最近的项目
+    const { data: projects, error: projectsError } = await supabase
+      .from('projects')
+      .select('*')
+      .in('organization_id', organizationIds)
+      .order('created_at', { ascending: false })
+      .limit(5)
+    
+    if (projectsError) {
+      console.error('查询项目失败:', projectsError)
+      // 如果表不存在，返回空数组
+      if (projectsError.message?.includes('does not exist')) {
+        console.warn('projects表不存在，返回空项目列表')
+        recentProjects.value = []
+        return
+      }
+      recentProjects.value = []
+      return
+    }
+    
+    recentProjects.value = projects || []
     console.log('✅ 最近项目加载完成，数量:', recentProjects.value.length)
       
   } catch (error) {
     console.error('加载最近项目失败:', error)
     recentProjects.value = []
+  }
+}
+
+// 加载所有活跃项目
+async function loadActiveProjects() {
+  try {
+    const userId = authStore.user?.id
+    const userEmail = authStore.user?.email
+    
+    if (!userId && !userEmail) {
+      console.log('用户ID和邮箱都为空，跳过活跃项目加载')
+      activeProjects.value = []
+      return
+    }
+
+    console.log('🔍 开始加载活跃项目，认证ID:', userId, '邮箱:', userEmail)
+    
+    // 直接使用Supabase查询活跃项目，避免复杂的服务调用
+    
+    // 1. 获取用户所属的组织
+    const dbUserId = await getDatabaseUserId()
+    if (!dbUserId) {
+      console.log('无法获取数据库用户ID，跳过活跃项目加载')
+      activeProjects.value = []
+      return
+    }
+    
+    console.log('✅ 获取到数据库用户ID:', dbUserId)
+    
+    // 获取用户所属的组织
+    const { data: userOrgs, error: orgsError } = await supabase
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', dbUserId)
+    
+    if (orgsError) {
+      console.error('查询组织成员关系失败:', orgsError)
+      // 如果表不存在，返回空数组
+      if (orgsError.message?.includes('does not exist')) {
+        console.warn('organization_members表不存在，返回空项目列表')
+        activeProjects.value = []
+        return
+      }
+      activeProjects.value = []
+      return
+    }
+    
+    const organizationIds = userOrgs?.map(org => org.organization_id) || []
+    console.log('✅ 用户所属组织数量:', organizationIds.length)
+    
+    // 2. 如果用户没有组织，返回空数组
+    if (organizationIds.length === 0) {
+      activeProjects.value = []
+      console.log('用户没有组织，返回空项目列表')
+      return
+    }
+    
+    // 3. 获取所有活跃项目
+    const { data: projects, error: projectsError } = await supabase
+      .from('projects')
+      .select('*')
+      .in('organization_id', organizationIds)
+      .eq('status', 'active')
+      .order('priority', { ascending: false })
+      .order('created_at', { ascending: false })
+    
+    if (projectsError) {
+      console.error('查询活跃项目失败:', projectsError)
+      // 如果表不存在，返回空数组
+      if (projectsError.message?.includes('does not exist')) {
+        console.warn('projects表不存在，返回空项目列表')
+        activeProjects.value = []
+        return
+      }
+      activeProjects.value = []
+      return
+    }
+    
+    activeProjects.value = projects || []
+    console.log('✅ 活跃项目加载完成，数量:', activeProjects.value.length)
+      
+  } catch (error) {
+    console.error('加载活跃项目失败:', error)
+    activeProjects.value = []
   }
 }
 
@@ -547,13 +897,14 @@ async function loadDashboardData() {
     
     console.log('🚀 开始加载仪表盘数据，用户ID:', authStore.user.id)
     
-    // 并行加载用户档案、统计数据、最近项目
+    // 并行加载用户档案、统计数据、最近项目、活跃项目
     loadingMessage.value = '正在初始化数据加载...'
     
     await Promise.all([
       loadUserProfile(),
       loadStats(),
-      loadRecentProjects()
+      loadRecentProjects(),
+      loadActiveProjects()
     ])
     
     // 生成AI建议

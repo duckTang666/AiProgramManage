@@ -13,6 +13,9 @@
             <button @click="showCreateModal = true" class="btn btn-primary">
               创建组织
             </button>
+            <button @click="logout" class="btn btn-outline text-sm">
+              退出登录
+            </button>
           </div>
         </div>
       </div>
@@ -117,8 +120,12 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import { useOrganizationStore } from '@/stores/organization'
 
+const router = useRouter()
+const authStore = useAuthStore()
 const organizationStore = useOrganizationStore()
 const { organizations, isLoading } = organizationStore
 
@@ -133,6 +140,16 @@ const newOrg = reactive({
 
 function formatDate(dateString: string) {
   return new Date(dateString).toLocaleDateString('zh-CN')
+}
+
+// 退出登录
+async function logout() {
+  try {
+    await authStore.logout()
+    router.push('/login')
+  } catch (error) {
+    console.error('Logout error:', error)
+  }
 }
 
 async function createOrganization() {

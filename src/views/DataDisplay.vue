@@ -351,14 +351,79 @@ async function loadChatHistory() {
   }
 }
 
+// 获取数据库中的用户ID
+async function getDatabaseUserId(): Promise<number | null> {
+  try {
+    const userEmail = authStore.user?.email
+    
+    if (!userEmail) {
+      console.log('用户邮箱为空，无法查询数据库用户ID')
+      return null
+    }
+    
+    console.log('🔍 开始查询数据库用户ID，邮箱:', userEmail)
+    
+    const { data, error } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', userEmail)
+      .single()
+    
+    if (error) {
+      console.error('查询数据库用户ID失败:', error)
+      return null
+    }
+    
+    console.log('✅ 获取到数据库用户ID:', data.id)
+    return data.id
+  } catch (error) {
+    console.error('获取数据库用户ID失败:', error)
+    return null
+  }
+}
+
 // 加载组织数据（用于统计）
 async function loadOrganizations() {
   try {
-    // 这里使用一个默认用户ID
-    const data = await OrganizationService.getOrganizations(1)
-    stats.value.organizations = data?.length || 0
+    // 获取当前用户的数据库ID
+    const dbUserId = await getDatabaseUserId()
+    if (!dbUserId) {
+      console.log('无法获取数据库用户ID，跳过组织数据加载')
+      stats.value.organizations = 0
+      return
+    }
+    
+    // 获取用户所属的组织（包括作为成员和作为所有者的组织）
+    const [
+      { data: userOrgs, error: orgsError },
+      { data: ownedOrgs, error: ownedOrgsError }
+    ] = await Promise.all([
+      supabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', dbUserId),
+      supabase
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', dbUserId)
+    ])
+    
+    if (orgsError && ownedOrgsError) {
+      console.error('查询组织关系失败:', orgsError, ownedOrgsError)
+      stats.value.organizations = 0
+      return
+    }
+    
+    // 合并用户作为成员的组织和作为所有者的组织
+    const memberOrgIds = userOrgs?.map(org => org.organization_id) || []
+    const ownedOrgIds = ownedOrgs?.map(org => org.id) || []
+    const organizationIds = [...new Set([...memberOrgIds, ...ownedOrgIds])]
+    
+    stats.value.organizations = organizationIds.length
+    console.log('✅ 用户所属组织数量:', organizationIds.length)
   } catch (error) {
     console.error('加载组织数据失败:', error)
+    stats.value.organizations = 0
   }
 }
 

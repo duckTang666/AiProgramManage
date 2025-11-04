@@ -14,6 +14,9 @@
             <button @click="showCreateModal = true" class="btn btn-primary">
               创建新项目
             </button>
+            <button @click="logout" class="btn btn-outline text-sm">
+              退出登录
+            </button>
           </div>
         </div>
       </div>
@@ -309,8 +312,8 @@ const organizationStore = useOrganizationStore()
 const projectStore = useProjectStore()
 
 // 项目数据
-const projects = ref([])
-const tasks = ref([])
+const projects = ref<any[]>([])
+const tasks = ref<any[]>([])
 const isLoading = ref(false)
 
 // AI建议
@@ -342,20 +345,18 @@ const newMessage = ref('')
 async function loadProjects() {
   isLoading.value = true
   try {
-    // 获取当前用户ID并映射到数据库用户ID
+    // 获取当前登录用户
     const authUserId = authStore.user?.id
     if (!authUserId) {
       throw new Error('用户未登录')
     }
-
-    // 根据Auth用户ID查找对应的users表记录
-    const { UserService } = await import('@/lib/database')
-    const userRecord = await UserService.getUserByAuthId(authUserId)
     
+    // 获取用户记录
+    const userRecord = await getUserRecordWithCache()
     if (!userRecord) {
-      throw new Error('用户记录不存在，请先完善用户信息')
+      throw new Error('用户记录不存在')
     }
-
+    
     // 加载用户组织
     await organizationStore.fetchOrganizations(userRecord.id)
     
@@ -366,10 +367,29 @@ async function loadProjects() {
       projects.value.push(...projectStore.projects)
     }
     
+    // 如果组织为空，直接加载所有项目（降级方案）
+    if (projects.value.length === 0) {
+      console.log('组织为空，尝试直接加载所有项目...')
+      try {
+        const { data: allProjects, error } = await supabase
+          .from('projects')
+          .select('*')
+          .order('created_at', { ascending: false })
+        
+        if (!error && allProjects) {
+          projects.value = allProjects
+        }
+      } catch (error) {
+        console.error('加载所有项目失败:', error)
+      }
+    }
+    
     // 加载任务数据
     if (projects.value.length > 0) {
       await loadTasks()
     }
+    
+    console.log(`✅ 成功加载 ${projects.value.length} 个项目`)
     
   } catch (error) {
     console.error('加载项目数据失败:', error)
@@ -394,6 +414,16 @@ async function loadTasks() {
   }
 }
 
+// 退出登录
+async function logout() {
+  try {
+    await authStore.logout()
+    router.push('/login')
+  } catch (error) {
+    console.error('Logout error:', error)
+  }
+}
+
 // 创建新项目 - 优化版本
 async function createProject() {
   if (!newProject.name.trim()) {
@@ -410,14 +440,9 @@ async function createProject() {
   createError.value = ''
 
   try {
-    // 并行获取用户ID映射和创建项目数据
-    const [userRecord, createdProject] = await Promise.all([
-      // 获取用户记录（带缓存优化）
-      getUserRecordWithCache(),
-      // 准备项目数据（立即执行）
-      prepareProjectData()
-    ])
-
+    // 获取用户记录
+    const userRecord = await getUserRecordWithCache()
+    
     if (!userRecord) {
       throw new Error('用户记录不存在，请先完善用户信息')
     }
@@ -427,7 +452,7 @@ async function createProject() {
       id: Date.now(), // 临时ID
       name: newProject.name,
       description: newProject.description,
-      organization_id: newProject.organization_id,
+      organization_id: parseInt(newProject.organization_id),
       owner_id: userRecord.id,
       status: 'active',
       priority: 'medium',
@@ -441,9 +466,9 @@ async function createProject() {
     
     // 异步创建项目（不阻塞UI）
     const actualProject = await projectStore.createProject({
-      name: newProject.name,
-      description: newProject.description,
-      organization_id: newProject.organization_id,
+      name: newProject.name.trim(),
+      description: newProject.description?.trim() || '',
+      organization_id: parseInt(newProject.organization_id),
       owner_id: userRecord.id
     })
     
@@ -465,7 +490,16 @@ async function createProject() {
     // 回滚乐观更新
     rollbackOptimisticUpdate()
     
-    createError.value = error.message || '创建项目失败，请检查网络连接或数据库状态'
+    // 提供更友好的错误信息
+    if (error.message.includes('项目名称已存在')) {
+      createError.value = '项目名称已存在，请使用其他名称'
+    } else if (error.message.includes('权限不足')) {
+      createError.value = '权限不足，无法创建项目'
+    } else if (error.message.includes('指定的组织或负责人不存在')) {
+      createError.value = '指定的组织或负责人不存在'
+    } else {
+      createError.value = error.message || '创建项目失败，请检查网络连接或数据库状态'
+    }
   } finally {
     isCreating.value = false
   }

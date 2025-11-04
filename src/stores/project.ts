@@ -1,21 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { ProjectService } from '@/lib/database'
-
-export interface Project {
-  id: number
-  name: string
-  description?: string | null
-  status: string
-  priority: string
-  progress_percentage?: number | null
-  start_date?: string | null
-  end_date?: string | null
-  owner_id: number
-  organization_id: number
-  created_at: string
-  updated_at: string
-}
+import { ProjectService, type Project } from '@/lib/database'
 
 export const useProjectStore = defineStore('project', () => {
   const projects = ref<Project[]>([])

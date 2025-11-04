@@ -1,17 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { OrganizationService } from '@/lib/database'
-
-export interface Organization {
-  id: number
-  name: string
-  description?: string | null
-  logo_url?: string | null
-  owner_id: number
-  is_active?: boolean | null
-  created_at: string
-  updated_at: string
-}
+import { OrganizationService, type Organization } from '@/lib/database'
 
 export const useOrganizationStore = defineStore('organization', () => {
   const organizations = ref<Organization[]>([])
@@ -21,7 +10,7 @@ export const useOrganizationStore = defineStore('organization', () => {
   async function fetchOrganizations(userId: number) {
     isLoading.value = true
     try {
-      const data = await OrganizationService.getOrganizations(userId)
+      const data = await OrganizationService.getUserOrganizations(userId.toString())
       organizations.value = data || []
     } catch (error) {
       console.error('Error fetching organizations:', error)

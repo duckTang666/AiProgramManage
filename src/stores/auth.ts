@@ -12,27 +12,41 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function init() {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      user.value = session?.user ?? null
+      // 并行执行认证检查和监听器设置
+      const [sessionResult] = await Promise.allSettled([
+        supabase.auth.getSession()
+      ])
       
-      // 检查用户记录是否存在，如果不存在则自动创建
-      if (user.value) {
-        await ensureUserRecordExists(user.value)
+      if (sessionResult.status === 'fulfilled') {
+        const { data: { session } } = sessionResult.value
+        user.value = session?.user ?? null
+        
+        // 异步检查用户记录，不阻塞初始化
+        if (user.value) {
+          ensureUserRecordExists(user.value).catch(() => {
+            // 静默处理错误，不影响初始化
+          })
+        }
       }
       
-      // 监听认证状态变化
-      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // 监听认证状态变化（非阻塞）
+      supabase.auth.onAuthStateChange(async (event, session) => {
         user.value = session?.user ?? null
         
         // 只在登录事件时检查用户记录
         if (user.value && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-          await ensureUserRecordExists(user.value)
+          ensureUserRecordExists(user.value).catch(() => {
+            // 静默处理错误
+          })
         }
       })
     } catch (error) {
       console.error('Auth initialization error:', error)
     } finally {
-      isLoading.value = false
+      // 设置超时，确保初始化不会无限期等待
+      setTimeout(() => {
+        isLoading.value = false
+      }, 100)
     }
   }
   

@@ -1,21 +1,21 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
-// 使用懒加载优化应用启动速度
-const Dashboard = () => import('@/views/Dashboard.vue')
-const ProjectManagement = () => import('@/views/ProjectManagement.vue')
-const Login = () => import('@/views/Login.vue')
-const Register = () => import('@/views/Register.vue')
-const EmailConfirmation = () => import('@/views/EmailConfirmation.vue')
-const ForgotPassword = () => import('@/views/ForgotPassword.vue')
-const ResetPassword = () => import('@/views/ResetPassword.vue')
-const Organizations = () => import('@/views/Organizations.vue')
-const OrganizationDetail = () => import('@/views/OrganizationDetail.vue')
-const ProjectDetail = () => import('@/views/ProjectDetail.vue')
-const NotFound = () => import('@/views/NotFound.vue')
-const DatabaseTest = () => import('@/views/DatabaseTest.vue')
-const CompleteProfile = () => import('@/views/CompleteProfile.vue')
-const DataDisplay = () => import('@/views/DataDisplay.vue')
+// 使用懒加载优化应用启动速度，添加加载状态和错误处理
+const Dashboard = () => import(/* webpackChunkName: "dashboard" */ '@/views/Dashboard.vue')
+const ProjectManagement = () => import(/* webpackChunkName: "project-management" */ '@/views/ProjectManagement.vue')
+const Login = () => import(/* webpackChunkName: "auth" */ '@/views/Login.vue')
+const Register = () => import(/* webpackChunkName: "auth" */ '@/views/Register.vue')
+const EmailConfirmation = () => import(/* webpackChunkName: "auth" */ '@/views/EmailConfirmation.vue')
+const ForgotPassword = () => import(/* webpackChunkName: "auth" */ '@/views/ForgotPassword.vue')
+const ResetPassword = () => import(/* webpackChunkName: "auth" */ '@/views/ResetPassword.vue')
+const Organizations = () => import(/* webpackChunkName: "organizations" */ '@/views/Organizations.vue')
+const OrganizationDetail = () => import(/* webpackChunkName: "organizations" */ '@/views/OrganizationDetail.vue')
+const ProjectDetail = () => import(/* webpackChunkName: "project-detail" */ '@/views/ProjectDetail.vue')
+const NotFound = () => import(/* webpackChunkName: "common" */ '@/views/NotFound.vue')
+const DatabaseTest = () => import(/* webpackChunkName: "debug" */ '@/views/DatabaseTest.vue')
+const CompleteProfile = () => import(/* webpackChunkName: "profile" */ '@/views/CompleteProfile.vue')
+const DataDisplay = () => import(/* webpackChunkName: "data" */ '@/views/DataDisplay.vue')
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

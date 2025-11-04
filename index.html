@@ -6,6 +6,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI项目管理平台</title>
     <meta name="description" content="革命性的AI驱动项目管理平台，通过三级AI智能体深度参与项目管理全流程" />
+    
+    <!-- 预加载关键资源，避免400错误 -->
+    <link rel="preload" href="/src/main.ts" as="script">
+    <link rel="preload" href="/vite.svg" as="image">
+    
+    <!-- 添加错误处理脚本 -->
+    <script>
+      // 全局错误处理
+      window.addEventListener('error', function(e) {
+        console.log('资源加载错误:', e.error ? e.error.message : e.message);
+      });
+      
+      // 处理未捕获的Promise错误
+      window.addEventListener('unhandledrejection', function(e) {
+        console.log('Promise错误:', e.reason);
+      });
+    </script>
   </head>
   <body>
     <div id="app"></div>

@@ -74,7 +74,7 @@ async function testDatabaseConnection() {
     // 尝试获取当前用户信息来测试连接
     const { data: authData } = await supabase.auth.getUser()
     if (authData.user) {
-      const user = await UserService.getUserByAuthId(authData.user.id)
+      const user = await UserService.getCurrentUser()
       if (user) {
         databaseConnected.value = true
         console.log('✅ 数据库连接成功')
@@ -117,7 +117,7 @@ async function initializeUserData() {
 
     // 并行加载用户档案和组织数据
     const [userProfileResult, organizationsResult] = await Promise.allSettled([
-      UserService.getUserByAuthId(user.id),
+      UserService.getCurrentUser(),
       organizationStore.fetchOrganizations(parseInt(user.id))
     ])
 

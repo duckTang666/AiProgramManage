@@ -145,10 +145,12 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useOrganizationStore } from '@/stores/organization'
 import { useProjectStore } from '@/stores/project'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const organizationStore = useOrganizationStore()
 const projectStore = useProjectStore()
+const authStore = useAuthStore()
 
 const organization = ref()
 const projects = ref([])
@@ -193,13 +195,23 @@ async function createProject() {
     return
   }
 
+  // 检查用户是否已登录
+  if (!authStore.user) {
+    createError.value = '请先登录后再创建项目'
+    return
+  }
+
   isCreating.value = true
   createError.value = ''
 
   try {
+    // 获取当前用户的ID作为项目负责人
+    const ownerId = await getCurrentUserId()
+    
     await projectStore.createProject({
       ...newProject,
-      organization_id: route.params.id as string
+      organization_id: parseInt(route.params.id as string),
+      owner_id: ownerId
     })
     showCreateProjectModal.value = false
     newProject.name = ''
@@ -210,6 +222,13 @@ async function createProject() {
   } finally {
     isCreating.value = false
   }
+}
+
+// 获取当前用户的ID
+async function getCurrentUserId(): Promise<number> {
+  // 这里需要根据实际的用户服务来获取用户ID
+  // 暂时返回一个默认值，实际项目中需要根据认证系统获取
+  return 1 // 临时默认值，需要根据实际用户系统调整
 }
 
 onMounted(async () => {

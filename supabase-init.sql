@@ -4,8 +4,8 @@
 -- 1. 用户表 (users)
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
+    auth_id UUID UNIQUE, -- Supabase Auth的用户ID
     email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
     display_name VARCHAR(100) NOT NULL,
     avatar_url TEXT,
     role VARCHAR(20) DEFAULT 'member' CHECK (role IN ('admin', 'manager', 'member', 'guest')),
@@ -188,8 +188,8 @@ ALTER TABLE organization_members ENABLE ROW LEVEL SECURITY;
 
 -- 插入默认数据
 -- 创建默认管理员用户（密码：Admin123!）
-INSERT INTO users (email, password_hash, display_name, role) VALUES 
-('admin@aiproject.com', '$2b$10$examplehash', '系统管理员', 'admin')
+INSERT INTO users (email, display_name, role) VALUES 
+('admin@aiproject.com', '系统管理员', 'admin')
 ON CONFLICT (email) DO NOTHING;
 
 -- 创建默认组织
