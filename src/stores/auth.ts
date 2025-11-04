@@ -57,6 +57,7 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (error) {
       // 用户记录不存在，自动创建用户记录
       await UserService.createUser({
+        auth_id: authUser.id,
         email: authUser.email!,
         display_name: authUser.email!.split('@')[0],
         role: 'member',
@@ -92,6 +93,7 @@ export const useAuthStore = defineStore('auth', () => {
         } catch (profileError) {
           // 用户记录不存在，自动创建用户记录
           await UserService.createUser({
+            auth_id: data.user.id,
             email: data.user.email!,
             display_name: data.user.email!.split('@')[0],
             role: 'member',
@@ -133,6 +135,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (data.user && data.session) {
       try {
         await UserService.createUser({
+          auth_id: data.user.id,
           email: data.user.email!,
           display_name: userData.name,
           role: 'member',

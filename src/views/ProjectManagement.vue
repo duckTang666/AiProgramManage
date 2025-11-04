@@ -219,6 +219,105 @@
       </div>
     </div>
 
+    <!-- 创建任务模态框 -->
+    <div v-if="showCreateTaskModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-lg max-w-md w-full p-6">
+        <h3 class="text-lg font-semibold mb-4">创建新任务</h3>
+        
+        <form @submit.prevent="createTask">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">选择项目</label>
+              <select
+                v-model="newTask.project_id"
+                required
+                class="input"
+              >
+                <option value="">请选择项目</option>
+                <option 
+                  v-for="project in projects" 
+                  :key="project.id" 
+                  :value="project.id"
+                >
+                  {{ project.name }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">任务标题</label>
+              <input
+                v-model="newTask.title"
+                type="text"
+                required
+                class="input"
+                placeholder="请输入任务标题"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">任务描述</label>
+              <textarea
+                v-model="newTask.description"
+                class="input resize-none"
+                rows="3"
+                placeholder="请输入任务描述（可选）"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">优先级</label>
+              <select
+                v-model="newTask.priority"
+                class="input"
+              >
+                <option value="low">低</option>
+                <option value="medium">中</option>
+                <option value="high">高</option>
+                <option value="urgent">紧急</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">截止日期</label>
+              <input
+                v-model="newTask.due_date"
+                type="date"
+                class="input"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">预估工时（小时）</label>
+              <input
+                v-model="newTask.estimated_hours"
+                type="number"
+                min="0"
+                class="input"
+                placeholder="请输入预估工时"
+              />
+            </div>
+          </div>
+
+          <div v-if="createTaskError" class="text-red-600 text-sm mt-2">
+            {{ createTaskError }}
+          </div>
+
+          <div class="flex justify-end space-x-3 mt-6">
+            <button
+              type="button"
+              @click="showCreateTaskModal = false"
+              class="btn btn-secondary"
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              :disabled="isCreatingTask"
+              class="btn btn-primary"
+            >
+              {{ isCreatingTask ? '创建中...' : '创建' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- AI聊天助手 -->
     <div class="fixed bottom-6 right-6 z-50">
       <button
@@ -341,6 +440,20 @@ const chatMessages = ref([
   { text: '你好！我是AI助手，有什么可以帮助你的吗？', isUser: false }
 ])
 const newMessage = ref('')
+
+// 创建任务相关状态
+const showCreateTaskModal = ref(false)
+const isCreatingTask = ref(false)
+const createTaskError = ref('')
+
+const newTask = reactive({
+  project_id: '',
+  title: '',
+  description: '',
+  priority: 'medium',
+  due_date: '',
+  estimated_hours: ''
+})
 
 // 退出登录
 async function logout() {
@@ -587,8 +700,82 @@ const sendMessage = () => {
 }
 
 const addTask = () => {
-  // 这里应该打开创建任务的模态框
-  alert('创建新任务功能待实现')
+  // 打开创建任务模态框
+  showCreateTaskModal.value = true
+}
+
+// 创建新任务
+async function createTask() {
+  if (!newTask.project_id) {
+    createTaskError.value = '请选择项目'
+    return
+  }
+
+  if (!newTask.title.trim()) {
+    createTaskError.value = '请输入任务标题'
+    return
+  }
+
+  isCreatingTask.value = true
+  createTaskError.value = ''
+
+  try {
+    // 获取当前用户ID
+    const userRecord = await getUserRecordWithCache()
+    
+    if (!userRecord) {
+      throw new Error('用户记录不存在，请先完善用户信息')
+    }
+
+    // 准备任务数据
+    const taskData = {
+      project_id: parseInt(newTask.project_id),
+      title: newTask.title.trim(),
+      description: newTask.description?.trim() || '',
+      priority: newTask.priority,
+      status: 'todo',
+      assignee_id: userRecord.id, // 默认分配给当前用户
+      reporter_id: userRecord.id, // 报告人也是当前用户
+      due_date: newTask.due_date || null,
+      estimated_hours: newTask.estimated_hours ? parseFloat(newTask.estimated_hours) : null
+    }
+
+    // 使用TaskService创建任务
+    const createdTask = await TaskService.createTask(taskData)
+    
+    // 将新任务添加到任务列表
+    tasks.value.unshift(createdTask)
+    
+    // 关闭模态框并重置表单
+    showCreateTaskModal.value = false
+    resetTaskForm()
+    
+    console.log('✅ 任务创建成功')
+    
+  } catch (error: any) {
+    console.error('创建任务失败:', error)
+    
+    // 提供友好的错误信息
+    if (error.message.includes('项目不存在')) {
+      createTaskError.value = '指定的项目不存在'
+    } else if (error.message.includes('权限不足')) {
+      createTaskError.value = '权限不足，无法创建任务'
+    } else {
+      createTaskError.value = error.message || '创建任务失败，请检查网络连接或数据库状态'
+    }
+  } finally {
+    isCreatingTask.value = false
+  }
+}
+
+// 重置任务表单
+function resetTaskForm() {
+  newTask.project_id = ''
+  newTask.title = ''
+  newTask.description = ''
+  newTask.priority = 'medium'
+  newTask.due_date = ''
+  newTask.estimated_hours = ''
 }
 
 // 主加载函数：加载项目数据
