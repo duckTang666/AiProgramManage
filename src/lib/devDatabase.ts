@@ -46,6 +46,8 @@ export class DevDatabaseService {
 
   // 创建组织
   static async createOrganization(orgData: any) {
+    console.log('🔧 开发模式: 创建模拟组织数据')
+    
     // 模拟创建组织
     const newOrg = {
       id: Date.now().toString(),
@@ -54,8 +56,11 @@ export class DevDatabaseService {
       logo_url: orgData.logo_url,
       owner_id: orgData.owner_id,
       is_active: true,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     }
+    
+    console.log('✅ 模拟组织创建成功:', newOrg)
     return newOrg
   }
 }

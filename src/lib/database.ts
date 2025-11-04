@@ -62,16 +62,45 @@ export class ProjectService {
   static async createProject(projectData: Omit<Project, 'id' | 'created_at' | 'updated_at'>) {
     // 开发环境使用模拟数据
     if (import.meta.env.DEV) {
+      console.log('🔧 开发模式: 使用模拟数据创建项目')
       return await DevDatabaseService.createProject(projectData)
     }
     
-    const { data, error } = await supabase
-      .from('projects')
-      .insert(projectData)
-      .select()
-    
-    if (error) throw error
-    return data?.[0]
+    try {
+      console.log('📝 开始创建项目到数据库:', projectData)
+      
+      // 准备完整的项目数据
+      const completeProjectData = {
+        ...projectData,
+        progress_percentage: projectData.progress_percentage || 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+      
+      console.log('📋 完整项目数据:', completeProjectData)
+      
+      const { data, error } = await supabase
+        .from('projects')
+        .insert(completeProjectData)
+        .select()
+      
+      if (error) {
+        console.error('❌ 创建项目失败:', error)
+        throw error
+      }
+      
+      if (!data || data.length === 0) {
+        throw new Error('创建项目成功但未返回数据')
+      }
+      
+      const newProject = data[0]
+      console.log('✅ 项目创建成功:', newProject)
+      
+      return newProject
+    } catch (error) {
+      console.error('❌ 创建项目异常:', error)
+      throw error
+    }
   }
 
   static async getProjectById(id: string) {
@@ -332,28 +361,83 @@ export class OrganizationService {
       return await DevDatabaseService.getUserOrganizations(userId)
     }
     
-    const { data, error } = await supabase
-      .from('organizations')
-      .select('*')
-      .eq('owner_id', userId)
-    
-    if (error) throw error
-    return data
+    try {
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('owner_id', userId)
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        console.error('获取用户组织失败:', error)
+        // 如果表不存在，返回空数组
+        if (error.message?.includes('does not exist')) {
+          return []
+        }
+        throw error
+      }
+      return data || []
+    } catch (error) {
+      console.error('获取用户组织异常:', error)
+      return []
+    }
   }
 
   static async createOrganization(orgData: Omit<Organization, 'id' | 'created_at' | 'updated_at'>) {
     // 开发环境使用模拟数据
     if (import.meta.env.DEV) {
+      console.log('🔧 开发模式: 使用模拟数据创建组织')
       return await DevDatabaseService.createOrganization(orgData)
     }
     
-    const { data, error } = await supabase
-      .from('organizations')
-      .insert(orgData)
-      .select()
-    
-    if (error) throw error
-    return data?.[0]
+    try {
+      console.log('📝 开始创建组织到数据库:', orgData)
+      
+      // 准备完整的组织数据
+      const completeOrgData = {
+        ...orgData,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+      
+      console.log('📋 完整组织数据:', completeOrgData)
+      
+      const { data, error } = await supabase
+        .from('organizations')
+        .insert(completeOrgData)
+        .select()
+      
+      if (error) {
+        console.error('❌ 创建组织失败:', error)
+        throw error
+      }
+      
+      if (!data || data.length === 0) {
+        throw new Error('创建组织成功但未返回数据')
+      }
+      
+      const newOrganization = data[0]
+      console.log('✅ 组织创建成功:', newOrganization)
+      
+      // 自动将创建者添加到组织成员表中
+      try {
+        console.log('👥 开始添加组织成员...')
+        await OrganizationService.addOrganizationMember(
+          newOrganization.id.toString(),
+          orgData.owner_id.toString(),
+          'owner'
+        )
+        console.log('✅ 组织成员添加成功')
+      } catch (memberError) {
+        console.warn('⚠️ 添加组织成员失败，但组织创建成功:', memberError)
+      }
+      
+      return newOrganization
+    } catch (error) {
+      console.error('❌ 创建组织异常:', error)
+      throw error
+    }
   }
 
   static async updateOrganization(id: string, updates: Partial<Organization>) {
@@ -372,14 +456,92 @@ export class OrganizationService {
       return mockOrg
     }
     
-    const { data, error } = await supabase
-      .from('organizations')
-      .update(updates)
-      .eq('id', id)
-      .select()
+    try {
+      const { data, error } = await supabase
+        .from('organizations')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+      
+      if (error) throw error
+      return data?.[0]
+    } catch (error) {
+      console.error('更新组织异常:', error)
+      throw error
+    }
+  }
+
+  static async getOrganizationById(id: string) {
+    // 开发环境使用模拟数据
+    if (import.meta.env.DEV) {
+      const mockOrganizations = [
+        {
+          id: 1,
+          name: '默认组织',
+          description: '系统默认组织',
+          owner_id: 1,
+          is_active: true,
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z'
+        }
+      ]
+      return mockOrganizations.find(o => o.id.toString() === id) || null
+    }
     
-    if (error) throw error
-    return data?.[0]
+    try {
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('id', id)
+        .single()
+      
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('获取组织详情异常:', error)
+      throw error
+    }
+  }
+
+  static async addOrganizationMember(organizationId: string, userId: string, role: string = 'member') {
+    try {
+      const { data, error } = await supabase
+        .from('organization_members')
+        .insert({
+          organization_id: parseInt(organizationId),
+          user_id: parseInt(userId),
+          role,
+          joined_at: new Date().toISOString()
+        })
+        .select()
+      
+      if (error) throw error
+      return data?.[0]
+    } catch (error) {
+      console.error('添加组织成员异常:', error)
+      throw error
+    }
+  }
+
+  static async getOrganizationMembers(organizationId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('organization_members')
+        .select(`
+          *,
+          user:users!organization_members_user_id_fkey(id, display_name, email, avatar_url)
+        `)
+        .eq('organization_id', organizationId)
+      
+      if (error) throw error
+      return data || []
+    } catch (error) {
+      console.error('获取组织成员异常:', error)
+      return []
+    }
   }
 }
 

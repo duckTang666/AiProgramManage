@@ -163,27 +163,27 @@ async function createOrganization() {
 
   try {
     // 获取当前用户ID
-    const { useAuthStore } = await import('@/stores/auth')
-    const authStore = useAuthStore()
     const authUserId = authStore.user?.id
     
     if (!authUserId) {
       throw new Error('用户未登录')
     }
 
-    // 根据Auth用户ID查找对应的users表记录
-    const { UserService } = await import('@/lib/database')
-    const userRecord = await UserService.getUserByAuthId(authUserId)
+    // 获取用户记录（带自动创建功能）
+    const userRecord = await getUserRecordWithCache(authUserId)
     
-    if (!userRecord) {
-      throw new Error('用户记录不存在，请先完善用户信息')
+    if (!userRecord || !userRecord.id) {
+      throw new Error('用户记录获取失败，无法创建组织')
     }
 
-    await organizationStore.createOrganization({
+    // 创建组织
+    const newOrganization = await organizationStore.createOrganization({
       name: newOrg.name,
       description: newOrg.description,
       owner_id: userRecord.id
     })
+    
+    console.log('✅ 组织创建成功:', newOrganization)
     
     showCreateModal.value = false
     newOrg.name = ''
@@ -192,7 +192,7 @@ async function createOrganization() {
     // 重新加载组织数据
     await organizationStore.fetchOrganizations(userRecord.id)
   } catch (error: any) {
-    console.error('创建组织失败:', error)
+    console.error('❌ 创建组织失败:', error)
     createError.value = error.message || '创建组织失败，请检查网络连接或数据库状态'
   } finally {
     isCreating.value = false
@@ -201,7 +201,96 @@ async function createOrganization() {
 
 onMounted(async () => {
   if (organizations.length === 0) {
-    await organizationStore.fetchOrganizations()
+    await loadOrganizations()
   }
 })
+
+// 加载组织数据
+async function loadOrganizations() {
+  try {
+    // 获取当前用户ID
+    const authUserId = authStore.user?.id
+    
+    if (!authUserId) {
+      console.warn('用户未登录，无法加载组织数据')
+      return
+    }
+
+    // 获取用户记录（带自动创建功能）
+    const userRecord = await getUserRecordWithCache(authUserId)
+    
+    if (!userRecord || !userRecord.id) {
+      console.warn('用户记录获取失败，无法加载组织数据')
+      return
+    }
+
+    await organizationStore.fetchOrganizations(userRecord.id)
+  } catch (error) {
+    console.error('加载组织数据失败:', error)
+  }
+}
+
+// 带缓存的用户记录获取
+let userRecordCache: any = null
+let cacheTimestamp = 0
+const CACHE_DURATION = 5 * 60 * 1000 // 5分钟缓存
+
+async function getUserRecordWithCache(authUserId: string) {
+  // 检查缓存
+  const now = Date.now()
+  if (userRecordCache && (now - cacheTimestamp) < CACHE_DURATION) {
+    console.log('📦 使用缓存的用户记录')
+    return userRecordCache
+  }
+
+  try {
+    // 根据Auth用户ID查找对应的users表记录
+    const { UserService } = await import('@/lib/database')
+    const userRecord = await UserService.getUserByAuthId(authUserId)
+    
+    if (userRecord) {
+      // 更新缓存
+      userRecordCache = userRecord
+      cacheTimestamp = now
+      return userRecord
+    }
+
+    // 如果用户记录不存在，自动创建用户记录
+    console.log('用户记录不存在，自动创建用户记录')
+    
+    // 获取用户邮箱
+    const userEmail = authStore.user?.email || `user_${Date.now()}@example.com`
+    const displayName = authStore.user?.user_metadata?.name || userEmail.split('@')[0] || '用户'
+    
+    // 创建用户记录
+    const newUserRecord = await UserService.createUser({
+      auth_id: authUserId,
+      email: userEmail,
+      display_name: displayName,
+      role: 'member',
+      is_active: true
+    })
+    
+    // 更新缓存
+    userRecordCache = newUserRecord
+    cacheTimestamp = now
+    
+    return newUserRecord
+  } catch (error) {
+    console.error('获取用户记录失败:', error)
+    
+    // 返回默认用户对象作为降级方案
+    const defaultUser = {
+      id: Date.now(), // 临时ID
+      email: authStore.user?.email || `user_${Date.now()}@example.com`,
+      display_name: authStore.user?.user_metadata?.name || '用户',
+      role: 'member',
+      is_active: true
+    }
+    
+    userRecordCache = defaultUser
+    cacheTimestamp = now
+    return defaultUser
+  }
+}
 </script>

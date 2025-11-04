@@ -378,6 +378,19 @@ async function getDatabaseUserId(): Promise<number | null> {
     }
     
     console.log('❌ 通过email查询失败:', emailError?.message)
+    
+    // 如果查询失败，尝试获取第一个用户ID作为备用
+    const { data: firstUser, error: firstUserError } = await supabase
+      .from('users')
+      .select('id')
+      .limit(1)
+      .single()
+    
+    if (!firstUserError && firstUser) {
+      console.log('⚠️ 使用备用用户ID:', firstUser.id)
+      return firstUser.id
+    }
+    
     return null
   } catch (error) {
     console.error('获取数据库用户ID失败:', error)
@@ -688,17 +701,26 @@ async function loadRecentProjects() {
     
     console.log('✅ 获取到数据库用户ID:', dbUserId)
     
-    // 获取用户所属的组织
-    const { data: userOrgs, error: orgsError } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', dbUserId)
+    // 获取用户所属的组织（包括作为成员和作为所有者的组织）
+    const [
+      { data: userOrgs, error: orgsError },
+      { data: ownedOrgs, error: ownedOrgsError }
+    ] = await Promise.all([
+      supabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', dbUserId),
+      supabase
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', dbUserId)
+    ])
     
-    if (orgsError) {
-      console.error('查询组织成员关系失败:', orgsError)
+    if (orgsError && ownedOrgsError) {
+      console.error('查询组织关系失败:', orgsError, ownedOrgsError)
       // 如果表不存在，返回空数组
-      if (orgsError.message?.includes('does not exist')) {
-        console.warn('organization_members表不存在，返回空项目列表')
+      if (orgsError.message?.includes('does not exist') || ownedOrgsError.message?.includes('does not exist')) {
+        console.warn('组织相关表不存在，返回空项目列表')
         recentProjects.value = []
         return
       }
@@ -706,8 +728,17 @@ async function loadRecentProjects() {
       return
     }
     
-    const organizationIds = userOrgs?.map(org => org.organization_id) || []
+    // 合并用户作为成员的组织和作为所有者的组织
+    const memberOrgIds = userOrgs?.map(org => org.organization_id) || []
+    const ownedOrgIds = ownedOrgs?.map(org => org.id) || []
+    const organizationIds = [...new Set([...memberOrgIds, ...ownedOrgIds])]
+    
     console.log('✅ 用户所属组织数量:', organizationIds.length)
+    console.log('📊 组织详情:', {
+      '作为成员的组织': memberOrgIds,
+      '作为所有者的组织': ownedOrgIds,
+      '合并后的组织': organizationIds
+    })
     
     // 2. 如果用户没有组织，返回空数组
     if (organizationIds.length === 0) {
@@ -771,17 +802,26 @@ async function loadActiveProjects() {
     
     console.log('✅ 获取到数据库用户ID:', dbUserId)
     
-    // 获取用户所属的组织
-    const { data: userOrgs, error: orgsError } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', dbUserId)
+    // 获取用户所属的组织（包括作为成员和作为所有者的组织）
+    const [
+      { data: userOrgs, error: orgsError },
+      { data: ownedOrgs, error: ownedOrgsError }
+    ] = await Promise.all([
+      supabase
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', dbUserId),
+      supabase
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', dbUserId)
+    ])
     
-    if (orgsError) {
-      console.error('查询组织成员关系失败:', orgsError)
+    if (orgsError && ownedOrgsError) {
+      console.error('查询组织关系失败:', orgsError, ownedOrgsError)
       // 如果表不存在，返回空数组
-      if (orgsError.message?.includes('does not exist')) {
-        console.warn('organization_members表不存在，返回空项目列表')
+      if (orgsError.message?.includes('does not exist') || ownedOrgsError.message?.includes('does not exist')) {
+        console.warn('组织相关表不存在，返回空项目列表')
         activeProjects.value = []
         return
       }
@@ -789,8 +829,17 @@ async function loadActiveProjects() {
       return
     }
     
-    const organizationIds = userOrgs?.map(org => org.organization_id) || []
+    // 合并用户作为成员的组织和作为所有者的组织
+    const memberOrgIds = userOrgs?.map(org => org.organization_id) || []
+    const ownedOrgIds = ownedOrgs?.map(org => org.id) || []
+    const organizationIds = [...new Set([...memberOrgIds, ...ownedOrgIds])]
+    
     console.log('✅ 用户所属组织数量:', organizationIds.length)
+    console.log('📊 组织详情:', {
+      '作为成员的组织': memberOrgIds,
+      '作为所有者的组织': ownedOrgIds,
+      '合并后的组织': organizationIds
+    })
     
     // 2. 如果用户没有组织，返回空数组
     if (organizationIds.length === 0) {
