@@ -689,8 +689,35 @@ async function loadRecentProjects() {
 
     console.log('🔍 开始加载最近项目，认证ID:', userId, '邮箱:', userEmail)
     
-    // 直接使用Supabase查询最近项目，避免复杂的服务调用
-    
+    // 简化流程：直接加载所有项目，然后取最近5个
+    try {
+      console.log('🔍 尝试直接加载所有项目...')
+      const { data: allProjects, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        console.warn('直接加载项目失败，尝试组织关联方式:', error.message)
+        await loadRecentProjectsByOrganization()
+      } else {
+        recentProjects.value = (allProjects || []).slice(0, 5)
+        console.log(`✅ 直接加载最近项目成功: ${recentProjects.value.length} 个项目`)
+      }
+    } catch (directError) {
+      console.warn('直接加载项目异常，尝试组织关联方式:', directError)
+      await loadRecentProjectsByOrganization()
+    }
+      
+  } catch (error) {
+    console.error('加载最近项目失败:', error)
+    recentProjects.value = []
+  }
+}
+
+// 通过组织关联加载最近项目
+async function loadRecentProjectsByOrganization() {
+  try {
     // 1. 获取用户所属的组织
     const dbUserId = await getDatabaseUserId()
     if (!dbUserId) {
@@ -734,11 +761,6 @@ async function loadRecentProjects() {
     const organizationIds = [...new Set([...memberOrgIds, ...ownedOrgIds])]
     
     console.log('✅ 用户所属组织数量:', organizationIds.length)
-    console.log('📊 组织详情:', {
-      '作为成员的组织': memberOrgIds,
-      '作为所有者的组织': ownedOrgIds,
-      '合并后的组织': organizationIds
-    })
     
     // 2. 如果用户没有组织，返回空数组
     if (organizationIds.length === 0) {
@@ -771,7 +793,7 @@ async function loadRecentProjects() {
     console.log('✅ 最近项目加载完成，数量:', recentProjects.value.length)
       
   } catch (error) {
-    console.error('加载最近项目失败:', error)
+    console.error('通过组织关联加载最近项目失败:', error)
     recentProjects.value = []
   }
 }
@@ -790,8 +812,37 @@ async function loadActiveProjects() {
 
     console.log('🔍 开始加载活跃项目，认证ID:', userId, '邮箱:', userEmail)
     
-    // 直接使用Supabase查询活跃项目，避免复杂的服务调用
-    
+    // 简化流程：直接加载所有活跃项目
+    try {
+      console.log('🔍 尝试直接加载所有活跃项目...')
+      const { data: allProjects, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('status', 'active')
+        .order('priority', { ascending: false })
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        console.warn('直接加载活跃项目失败，尝试组织关联方式:', error.message)
+        await loadActiveProjectsByOrganization()
+      } else {
+        activeProjects.value = allProjects || []
+        console.log(`✅ 直接加载活跃项目成功: ${activeProjects.value.length} 个项目`)
+      }
+    } catch (directError) {
+      console.warn('直接加载活跃项目异常，尝试组织关联方式:', directError)
+      await loadActiveProjectsByOrganization()
+    }
+      
+  } catch (error) {
+    console.error('加载活跃项目失败:', error)
+    activeProjects.value = []
+  }
+}
+
+// 通过组织关联加载活跃项目
+async function loadActiveProjectsByOrganization() {
+  try {
     // 1. 获取用户所属的组织
     const dbUserId = await getDatabaseUserId()
     if (!dbUserId) {
@@ -835,11 +886,6 @@ async function loadActiveProjects() {
     const organizationIds = [...new Set([...memberOrgIds, ...ownedOrgIds])]
     
     console.log('✅ 用户所属组织数量:', organizationIds.length)
-    console.log('📊 组织详情:', {
-      '作为成员的组织': memberOrgIds,
-      '作为所有者的组织': ownedOrgIds,
-      '合并后的组织': organizationIds
-    })
     
     // 2. 如果用户没有组织，返回空数组
     if (organizationIds.length === 0) {
@@ -873,7 +919,7 @@ async function loadActiveProjects() {
     console.log('✅ 活跃项目加载完成，数量:', activeProjects.value.length)
       
   } catch (error) {
-    console.error('加载活跃项目失败:', error)
+    console.error('通过组织关联加载活跃项目失败:', error)
     activeProjects.value = []
   }
 }

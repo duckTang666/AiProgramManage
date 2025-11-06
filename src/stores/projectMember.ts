@@ -32,8 +32,8 @@ export const useProjectMemberStore = defineStore('projectMember', () => {
   // 获取可添加到项目的用户
   async function fetchAvailableUsers(organizationId: number, projectId: number) {
     try {
-      // 暂时返回空数组，因为ProjectMemberService中没有getAvailableUsers方法
-      availableUsers.value = []
+      const data = await ProjectMemberService.getAvailableUsers(organizationId, projectId)
+      availableUsers.value = data || []
     } catch (error) {
       console.error('Error fetching available users:', error)
       throw error
@@ -44,7 +44,11 @@ export const useProjectMemberStore = defineStore('projectMember', () => {
   async function addMemberToProject(projectId: number, userId: number, role: string = 'member') {
     isAddingMember.value = true
     try {
-      const data = await ProjectMemberService.addMemberToProject(projectId, userId, role)
+      const data = await ProjectMemberService.addProjectMember({
+        project_id: projectId,
+        user_id: userId,
+        role: role
+      })
       
       // 更新成员列表
       if (data) {
@@ -67,10 +71,10 @@ export const useProjectMemberStore = defineStore('projectMember', () => {
     try {
       const data = await ProjectMemberService.updateMemberRole(memberId, role)
       
-      // 更新成员列表中的角色
+      // 更新本地数据
       const memberIndex = members.value.findIndex(m => m.id === memberId)
-      if (memberIndex !== -1 && data) {
-        members.value[memberIndex] = data
+      if (memberIndex !== -1) {
+        members.value[memberIndex].role = role
       }
       
       return data
@@ -83,16 +87,21 @@ export const useProjectMemberStore = defineStore('projectMember', () => {
   // 从项目中移除成员
   async function removeMemberFromProject(memberId: number) {
     try {
-      const result = await ProjectMemberService.removeMemberFromProject(memberId)
+      // 找到要移除的成员
+      const removedMember = members.value.find(m => m.id === memberId)
+      if (!removedMember) {
+        throw new Error('成员不存在')
+      }
+      
+      // 调用数据库服务移除成员
+      const result = await ProjectMemberService.removeProjectMember(removedMember.project_id, removedMember.user_id)
       
       // 从成员列表中移除
-      const removedMember = members.value.find(m => m.id === memberId)
-      if (removedMember) {
-        members.value = members.value.filter(m => m.id !== memberId)
-        // 添加到可用用户列表
-        if (removedMember.user) {
-          availableUsers.value.push(removedMember.user)
-        }
+      members.value = members.value.filter(m => m.id !== memberId)
+      
+      // 添加到可用用户列表
+      if (removedMember.user) {
+        availableUsers.value.push(removedMember.user)
       }
       
       return result
@@ -129,7 +138,8 @@ export const useProjectMemberStore = defineStore('projectMember', () => {
   async function assignTaskToMember(taskId: number, assigneeId: number) {
     isAssigningTask.value = true
     try {
-      const data = await TaskService.assignTask(taskId, assigneeId)
+      // 使用TaskService的updateTask方法来分配任务
+      const data = await TaskService.updateTask(taskId, { assignee_id: assigneeId })
       return data
     } catch (error) {
       console.error('Error assigning task to member:', error)
@@ -142,8 +152,16 @@ export const useProjectMemberStore = defineStore('projectMember', () => {
   // 获取成员任务统计
   async function getMemberTaskStats(projectId: number, memberId: number) {
     try {
-      const stats = await TaskService.getMemberTaskStats(projectId, memberId)
-      return stats
+      // 由于TaskService中没有getMemberTaskStats方法，我们手动计算
+      const tasks = await TaskService.getTasksByProject(projectId)
+      const memberTasks = tasks.filter(task => task.assignee_id === memberId)
+      
+      return {
+        total: memberTasks.length,
+        todo: memberTasks.filter(t => t.status === 'todo').length,
+        inProgress: memberTasks.filter(t => t.status === 'in_progress').length,
+        completed: memberTasks.filter(t => t.status === 'done').length
+      }
     } catch (error) {
       console.error('Error getting member task stats:', error)
       return { total: 0, todo: 0, inProgress: 0, completed: 0 }
@@ -175,6 +193,21 @@ export const useProjectMemberStore = defineStore('projectMember', () => {
     return roleMap[role] || role
   }
 
+  // 生成示例团队成员
+  async function generateSampleTeamMembers(organizationId: number, projectId: number) {
+    try {
+      const data = await ProjectMemberService.generateSampleTeamMembers(organizationId, projectId)
+      
+      // 重新加载项目成员
+      await fetchProjectMembers(projectId)
+      
+      return data
+    } catch (error) {
+      console.error('Error generating sample team members:', error)
+      throw error
+    }
+  }
+
   // 清空数据
   function clearData() {
     members.value = []
@@ -197,6 +230,7 @@ export const useProjectMemberStore = defineStore('projectMember', () => {
     getMemberTaskStats,
     getRoleOptions,
     getRoleDisplayText,
+    generateSampleTeamMembers,
     clearData
   }
 })

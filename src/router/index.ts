@@ -108,6 +108,18 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   
+  // 检查是否为无效的组织详情路由
+  if (to.name === 'organization-detail' && to.params.id === 'undefined') {
+    next('/organizations')
+    return
+  }
+  
+  // 检查是否为无效的项目详情路由
+  if (to.name === 'project-detail' && to.params.id === 'undefined') {
+    next('/project-management')
+    return
+  }
+  
   // 等待认证初始化完成
   if (authStore.isLoading) {
     await new Promise(resolve => {

@@ -188,46 +188,46 @@ ALTER TABLE organization_members ENABLE ROW LEVEL SECURITY;
 
 -- 插入默认数据
 -- 创建默认管理员用户（密码：Admin123!）
-INSERT INTO users (email, display_name, role) VALUES 
-('admin@aiproject.com', '系统管理员', 'admin')
-ON CONFLICT (email) DO NOTHING;
+INSERT INTO users (id, email, display_name, role) VALUES 
+(125, 'admin@aiproject.com', '系统管理员', 'admin')
+ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, role = EXCLUDED.role;
 
 -- 创建默认组织
 INSERT INTO organizations (name, description, owner_id) VALUES 
-('默认组织', '系统默认组织', 1)
+('默认组织', '系统默认组织', 125)
 ON CONFLICT (id) DO NOTHING;
 
 -- 将管理员添加到默认组织
 INSERT INTO organization_members (organization_id, user_id, role) VALUES 
-(1, 1, 'owner')
+(1, 125, 'owner')
 ON CONFLICT (organization_id, user_id) DO NOTHING;
 
 -- 创建示例项目
 INSERT INTO projects (name, description, status, progress_percentage, owner_id, organization_id) VALUES 
-('示例项目', '这是一个示例项目，用于演示平台功能', 'active', 75, 1, 1)
+('示例项目', '这是一个示例项目，用于演示平台功能', 'active', 75, 125, 1)
 ON CONFLICT (id) DO NOTHING;
 
 -- 将管理员添加到示例项目
 INSERT INTO project_members (project_id, user_id, role) VALUES 
-(1, 1, 'owner')
+(1, 125, 'owner')
 ON CONFLICT (project_id, user_id) DO NOTHING;
 
 -- 创建示例任务
 INSERT INTO tasks (title, description, status, project_id, assignee_id, reporter_id) VALUES 
-('项目初始化', '完成项目基础设置和配置', 'done', 1, 1, 1),
-('用户界面设计', '设计项目的主要用户界面', 'in_progress', 1, 1, 1),
-('数据库设计', '设计并实现项目数据库结构', 'todo', 1, 1, 1)
+('项目初始化', '完成项目基础设置和配置', 'done', 1, 125, 125),
+('用户界面设计', '设计项目的主要用户界面', 'in_progress', 1, 125, 125),
+('数据库设计', '设计并实现项目数据库结构', 'todo', 1, 125, 125)
 ON CONFLICT (id) DO NOTHING;
 
 -- 创建示例文档
 INSERT INTO documents (title, content, project_id, organization_id, uploaded_by) VALUES 
-('项目需求文档', '详细的项目需求说明文档', 1, 1, 1),
-('技术架构设计', '项目的技术架构和系统设计', 1, 1, 1)
+('项目需求文档', '详细的项目需求说明文档', 1, 1, 125),
+('技术架构设计', '项目的技术架构和系统设计', 1, 1, 125)
 ON CONFLICT (id) DO NOTHING;
 
 -- 创建示例AI对话记录
 INSERT INTO chat_history (user_id, project_id, organization_id, message_type, user_message, ai_response) VALUES 
-(1, 1, 1, 'question', '如何开始这个项目？', '建议从项目需求分析和团队组建开始，然后制定详细的项目计划。')
+(125, 1, 1, 'question', '如何开始这个项目？', '建议从项目需求分析和团队组建开始，然后制定详细的项目计划。')
 ON CONFLICT (id) DO NOTHING;
 
 -- 显示创建结果

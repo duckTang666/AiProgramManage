@@ -720,11 +720,21 @@ async function createTask() {
   createTaskError.value = ''
 
   try {
-    // 获取当前用户ID
-    const userRecord = await getUserRecordWithCache()
+    // 获取数据库用户ID
+    const { UserService } = await import('@/lib/database')
+    let userId = 125 // 默认使用用户ID 125
     
-    if (!userRecord) {
-      throw new Error('用户记录不存在，请先完善用户信息')
+    // 尝试通过邮箱获取用户ID
+    const userEmail = authStore.user?.email
+    if (userEmail) {
+      try {
+        const userRecord = await UserService.getUserByEmail(userEmail)
+        if (userRecord?.id) {
+          userId = userRecord.id
+        }
+      } catch (error) {
+        console.warn('通过邮箱查询用户失败，使用默认ID 125:', error)
+      }
     }
 
     // 准备任务数据
@@ -734,8 +744,8 @@ async function createTask() {
       description: newTask.description?.trim() || '',
       priority: newTask.priority,
       status: 'todo',
-      assignee_id: userRecord.id, // 默认分配给当前用户
-      reporter_id: userRecord.id, // 报告人也是当前用户
+      assignee_id: userId, // 默认分配给当前用户
+      reporter_id: userId, // 报告人也是当前用户
       due_date: newTask.due_date || null,
       estimated_hours: newTask.estimated_hours ? parseFloat(newTask.estimated_hours) : null
     }
@@ -782,9 +792,13 @@ function resetTaskForm() {
 async function loadProjects() {
   isLoading.value = true
   try {
+    console.log('🚀 开始加载项目数据...')
+    
     // 检查用户是否登录
     if (!authStore.user?.id) {
-      throw new Error('用户未登录')
+      console.warn('用户未登录，使用降级方案')
+      await loadProjectsFallback()
+      return
     }
     
     // 获取用户记录（带自动创建功能）
@@ -797,31 +811,31 @@ async function loadProjects() {
       return
     }
     
-    // 加载用户组织
+    console.log('✅ 用户记录获取成功:', userRecord.id)
+    
+    // 尝试直接加载所有项目（简化流程）
     try {
-      await organizationStore.fetchOrganizations(userRecord.id)
-    } catch (orgError) {
-      console.warn('加载组织失败，使用降级方案:', orgError)
-      await loadProjectsFallback()
-      return
-    }
-    
-    // 加载每个组织的项目
-    projects.value = []
-    if (organizationStore.organizations.length > 0) {
-      for (const org of organizationStore.organizations) {
-        try {
-          await projectStore.fetchProjects(org.id)
-          projects.value.push(...projectStore.projects)
-        } catch (projectError) {
-          console.warn(`加载组织 ${org.id} 的项目失败:`, projectError)
-        }
+      console.log('🔍 尝试直接加载所有项目...')
+      const { data: allProjects, error } = await supabase
+        .from('projects')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        console.warn('直接加载项目失败，尝试组织关联方式:', error.message)
+        await loadProjectsByOrganization(userRecord.id)
+      } else {
+        projects.value = allProjects || []
+        console.log(`✅ 直接加载项目成功: ${projects.value.length} 个项目`)
       }
+    } catch (directError) {
+      console.warn('直接加载项目异常，尝试组织关联方式:', directError)
+      await loadProjectsByOrganization(userRecord.id)
     }
     
-    // 如果组织为空或项目为空，使用降级方案
+    // 如果项目为空，使用降级方案
     if (projects.value.length === 0) {
-      console.log('组织或项目为空，尝试降级方案...')
+      console.log('项目为空，尝试降级方案...')
       await loadProjectsFallback()
       return
     }
@@ -831,7 +845,7 @@ async function loadProjects() {
       await loadTasks()
     }
     
-    console.log(`✅ 成功加载 ${projects.value.length} 个项目`)
+    console.log(`🎉 项目数据加载完成: ${projects.value.length} 个项目`)
     
   } catch (error) {
     console.error('加载项目数据失败:', error)
@@ -839,6 +853,36 @@ async function loadProjects() {
     await loadProjectsFallback()
   } finally {
     isLoading.value = false
+  }
+}
+
+// 通过组织关联加载项目
+async function loadProjectsByOrganization(userId: number) {
+  try {
+    console.log('🔍 通过组织关联加载项目...')
+    
+    // 加载用户组织
+    await organizationStore.fetchOrganizations(userId)
+    
+    console.log(`📊 用户组织数量: ${organizationStore.organizations.length}`)
+    
+    // 加载每个组织的项目
+    projects.value = []
+    if (organizationStore.organizations.length > 0) {
+      for (const org of organizationStore.organizations) {
+        try {
+          await projectStore.fetchProjects(org.id)
+          projects.value.push(...projectStore.projects)
+          console.log(`✅ 加载组织 ${org.id} 的项目: ${projectStore.projects.length} 个`)
+        } catch (projectError) {
+          console.warn(`加载组织 ${org.id} 的项目失败:`, projectError)
+        }
+      }
+    }
+    
+  } catch (error) {
+    console.error('通过组织关联加载项目失败:', error)
+    throw error
   }
 }
 

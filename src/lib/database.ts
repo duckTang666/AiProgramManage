@@ -104,18 +104,90 @@ export class UserService {
 
 // 组织服务
 export class OrganizationService {
-  // 获取用户的所有组织
-  static async getUserOrganizations(userId: number): Promise<Organization[]> {
+  // 获取用户的所有组织（包含统计信息）
+  static async getUserOrganizations(userId: number | string): Promise<Organization[]> {
     try {
-      const { data, error } = await supabase
+      console.log('🔍 查询用户组织，用户ID:', userId)
+      
+      // 转换为字符串格式进行查询，避免整数溢出问题
+      const userIdStr = userId.toString()
+      
+      // 首先检查用户是否是组织所有者
+      const { data: ownedOrgs, error: ownedError } = await supabase
+        .from('organizations')
+        .select('*')
+        .eq('owner_id', userIdStr)
+      
+      if (ownedError) {
+        console.error('查询用户拥有的组织失败:', ownedError)
+      }
+      
+      // 然后检查用户作为成员的组织
+      const { data: memberOrgs, error: memberError } = await supabase
         .from('organization_members')
         .select(`
           organization:organizations(*)
         `)
-        .eq('user_id', userId)
+        .eq('user_id', userIdStr)
       
-      if (error) throw error
-      return data?.map(item => item.organization) || []
+      if (memberError) {
+        console.error('查询用户成员组织失败:', memberError)
+      }
+      
+      // 合并结果并去重
+      const allOrgs = []
+      
+      if (ownedOrgs) {
+        allOrgs.push(...ownedOrgs)
+      }
+      
+      if (memberOrgs) {
+        const memberOrgList = memberOrgs
+          .filter(item => item.organization)
+          .map(item => item.organization)
+        allOrgs.push(...memberOrgList)
+      }
+      
+      // 去重（基于组织ID）
+      const uniqueOrgs = allOrgs.filter((org, index, self) => 
+        index === self.findIndex(o => o.id === org.id)
+      )
+      
+      console.log('✅ 查询到的组织数量:', uniqueOrgs.length)
+      
+      // 为每个组织获取统计信息
+      const orgsWithStats = await Promise.all(
+        uniqueOrgs.map(async (org) => {
+          try {
+            // 获取项目数量
+            const { count: projectCount, error: projectError } = await supabase
+              .from('projects')
+              .select('*', { count: 'exact', head: true })
+              .eq('organization_id', org.id)
+            
+            // 获取成员数量
+            const { count: memberCount, error: memberError } = await supabase
+              .from('organization_members')
+              .select('*', { count: 'exact', head: true })
+              .eq('organization_id', org.id)
+            
+            return {
+              ...org,
+              project_count: projectError ? 0 : projectCount || 0,
+              member_count: memberError ? 1 : (memberCount || 0) + 1 // 包含创建者
+            }
+          } catch (error) {
+            console.error(`获取组织 ${org.id} 统计信息失败:`, error)
+            return {
+              ...org,
+              project_count: 0,
+              member_count: 1
+            }
+          }
+        })
+      )
+      
+      return orgsWithStats
     } catch (error) {
       console.error('Error fetching user organizations:', error)
       return []
@@ -126,10 +198,13 @@ export class OrganizationService {
   static async createOrganization(orgData: {
     name: string
     description?: string
-    owner_id: number
+    owner_id: number | string
   }): Promise<Organization> {
     try {
-      const { data, error } = await supabase
+      console.log('📝 开始创建组织:', orgData)
+      
+      // 创建组织
+      const { data: orgDataResult, error: orgError } = await supabase
         .from('organizations')
         .insert([{
           name: orgData.name,
@@ -139,10 +214,30 @@ export class OrganizationService {
         .select()
         .single()
       
-      if (error) throw error
-      return data
+      if (orgError) throw orgError
+      
+      console.log('✅ 组织创建成功:', orgDataResult)
+      
+      // 将创建者自动添加为组织成员
+      const { error: memberError } = await supabase
+        .from('organization_members')
+        .insert([{
+          organization_id: orgDataResult.id,
+          user_id: orgData.owner_id,
+          role: 'owner',
+          joined_at: new Date().toISOString()
+        }])
+      
+      if (memberError) {
+        console.error('❌ 添加创建者为成员失败:', memberError)
+        // 不抛出错误，因为组织已经创建成功
+      } else {
+        console.log('✅ 创建者已添加为组织成员')
+      }
+      
+      return orgDataResult
     } catch (error) {
-      console.error('Error creating organization:', error)
+      console.error('❌ 创建组织失败:', error)
       throw error
     }
   }
@@ -161,6 +256,62 @@ export class OrganizationService {
     } catch (error) {
       console.error('Error fetching organization:', error)
       return null
+    }
+  }
+
+  // 更新组织
+  static async updateOrganization(orgId: number, updateData: { name?: string; description?: string; is_active?: boolean }): Promise<Organization> {
+    try {
+      console.log('📝 开始更新组织:', orgId, updateData)
+      
+      const { data, error } = await supabase
+        .from('organizations')
+        .update({
+          ...updateData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orgId)
+        .select()
+        .single()
+      
+      if (error) throw error
+      
+      console.log('✅ 组织更新成功:', data)
+      return data
+    } catch (error) {
+      console.error('❌ 更新组织失败:', error)
+      throw error
+    }
+  }
+
+  // 删除组织
+  static async deleteOrganization(orgId: number): Promise<void> {
+    try {
+      console.log('🗑️ 开始删除组织:', orgId)
+      
+      // 首先删除相关的组织成员记录
+      const { error: memberError } = await supabase
+        .from('organization_members')
+        .delete()
+        .eq('organization_id', orgId)
+      
+      if (memberError) {
+        console.error('❌ 删除组织成员记录失败:', memberError)
+        // 继续删除组织，不抛出错误
+      }
+      
+      // 然后删除组织
+      const { error: orgError } = await supabase
+        .from('organizations')
+        .delete()
+        .eq('id', orgId)
+      
+      if (orgError) throw orgError
+      
+      console.log('✅ 组织删除成功')
+    } catch (error) {
+      console.error('❌ 删除组织失败:', error)
+      throw error
     }
   }
 }
@@ -273,6 +424,40 @@ export class ProjectMemberService {
     }
   }
 
+  // 获取可添加到项目的用户（组织成员但不在项目中）
+  static async getAvailableUsers(organizationId: number, projectId: number): Promise<any[]> {
+    try {
+      // 获取组织成员
+      const { data: orgMembers, error: orgError } = await supabase
+        .from('organization_members')
+        .select(`
+          user:users(id, display_name, email, role)
+        `)
+        .eq('organization_id', organizationId)
+      
+      if (orgError) throw orgError
+      
+      // 获取项目成员
+      const { data: projectMembers, error: projectError } = await supabase
+        .from('project_members')
+        .select('user_id')
+        .eq('project_id', projectId)
+      
+      if (projectError) throw projectError
+      
+      // 过滤掉已经是项目成员的用户
+      const projectMemberIds = new Set(projectMembers?.map(m => m.user_id) || [])
+      const availableUsers = orgMembers
+        ?.filter(member => member.user && !projectMemberIds.has(member.user.id))
+        .map(member => member.user) || []
+      
+      return availableUsers
+    } catch (error) {
+      console.error('Error fetching available users:', error)
+      return []
+    }
+  }
+
   // 添加项目成员
   static async addProjectMember(memberData: {
     project_id: number
@@ -298,6 +483,24 @@ export class ProjectMemberService {
     }
   }
 
+  // 更新成员角色
+  static async updateMemberRole(memberId: number, role: string): Promise<ProjectMember> {
+    try {
+      const { data, error } = await supabase
+        .from('project_members')
+        .update({ role })
+        .eq('id', memberId)
+        .select()
+        .single()
+      
+      if (error) throw error
+      return data
+    } catch (error) {
+      console.error('Error updating member role:', error)
+      throw error
+    }
+  }
+
   // 移除项目成员
   static async removeProjectMember(projectId: number, userId: number): Promise<void> {
     try {
@@ -311,6 +514,228 @@ export class ProjectMemberService {
     } catch (error) {
       console.error('Error removing project member:', error)
       throw error
+    }
+  }
+
+  // 生成示例团队成员
+  static async generateSampleTeamMembers(organizationId: number, projectId: number): Promise<any[]> {
+    try {
+      // 检查是否已经有团队成员
+      const existingMembers = await this.getProjectMembers(projectId)
+      if (existingMembers.length > 0) {
+        throw new Error('项目中已有团队成员，无需生成示例成员')
+      }
+
+      // 更丰富的示例团队成员数据
+      const sampleMembers = [
+        {
+          display_name: '张三',
+          email: 'zhangsan@example.com',
+          role: 'manager',
+          project_role: 'manager',
+          avatar_color: '#3B82F6',
+          skills: ['项目管理', '团队协作', '需求分析'],
+          description: '资深项目经理，擅长敏捷开发'
+        },
+        {
+          display_name: '李四',
+          email: 'lisi@example.com',
+          role: 'developer',
+          project_role: 'developer',
+          avatar_color: '#10B981',
+          skills: ['Vue.js', 'TypeScript', 'Node.js'],
+          description: '前端开发专家，热爱新技术'
+        },
+        {
+          display_name: '王五',
+          email: 'wangwu@example.com',
+          role: 'designer',
+          project_role: 'designer',
+          avatar_color: '#8B5CF6',
+          skills: ['UI设计', '用户体验', '原型设计'],
+          description: 'UI/UX设计师，注重细节和用户体验'
+        },
+        {
+          display_name: '赵六',
+          email: 'zhaoliu@example.com',
+          role: 'tester',
+          project_role: 'tester',
+          avatar_color: '#F59E0B',
+          skills: ['自动化测试', '性能测试', '安全测试'],
+          description: '质量保证工程师，确保产品质量'
+        },
+        {
+          display_name: '钱七',
+          email: 'qianqi@example.com',
+          role: 'developer',
+          project_role: 'developer',
+          avatar_color: '#EF4444',
+          skills: ['Java', 'Spring Boot', '数据库'],
+          description: '后端开发工程师，专注系统架构'
+        },
+        {
+          display_name: '孙八',
+          email: 'sunba@example.com',
+          role: 'developer',
+          project_role: 'developer',
+          avatar_color: '#06B6D4',
+          skills: ['React', '移动端开发', '跨平台'],
+          description: '全栈开发工程师，技术全面'
+        },
+        {
+          display_name: '周九',
+          email: 'zhoujiu@example.com',
+          role: 'tester',
+          project_role: 'tester',
+          avatar_color: '#F97316',
+          skills: ['功能测试', '兼容性测试', '回归测试'],
+          description: '测试工程师，细心严谨'
+        }
+      ]
+
+      const createdUsers = []
+      
+      // 创建示例用户并添加到项目
+      for (const memberData of sampleMembers) {
+        try {
+          // 检查用户是否已存在
+          let user = await UserService.getUserByEmail(memberData.email)
+          
+          if (!user) {
+            // 创建新用户
+            user = await UserService.createUser({
+              email: memberData.email,
+              display_name: memberData.display_name,
+              role: memberData.role
+            })
+          }
+
+          // 确保用户是组织成员
+          const { error: orgMemberError } = await supabase
+            .from('organization_members')
+            .upsert([{
+              organization_id: organizationId,
+              user_id: user.id,
+              role: memberData.role
+            }], {
+              onConflict: 'organization_id,user_id'
+            })
+
+          if (orgMemberError) {
+            console.error('Error adding user to organization:', orgMemberError)
+            continue
+          }
+
+          // 添加用户到项目
+          const projectMember = await this.addProjectMember({
+            project_id: projectId,
+            user_id: user.id,
+            role: memberData.project_role
+          })
+
+          // 为用户添加更多信息
+          if (projectMember) {
+            await UserService.updateUser(user.id, {
+              description: memberData.description
+            })
+          }
+
+          createdUsers.push({
+            ...user,
+            project_role: memberData.project_role,
+            avatar_color: memberData.avatar_color,
+            skills: memberData.skills,
+            description: memberData.description
+          })
+          
+        } catch (error) {
+          console.error(`Error creating sample member ${memberData.display_name}:`, error)
+          // 继续创建其他成员，不中断整个流程
+        }
+      }
+
+      // 如果成功创建了成员，自动创建一些示例任务
+      if (createdUsers.length > 0) {
+        await this.createSampleTasksForTeam(projectId, createdUsers)
+      }
+
+      return createdUsers
+    } catch (error) {
+      console.error('Error generating sample team members:', error)
+      throw error
+    }
+  }
+
+  // 为示例团队创建示例任务
+  static async createSampleTasksForTeam(projectId: number, teamMembers: any[]): Promise<void> {
+    try {
+      const sampleTasks = [
+        {
+          title: '项目需求分析和规划',
+          description: '完成项目的需求分析文档和开发计划',
+          priority: 'high',
+          status: 'in_progress',
+          assignee_role: 'manager'
+        },
+        {
+          title: '设计系统UI组件库',
+          description: '设计并建立项目的UI组件库和设计规范',
+          priority: 'high',
+          status: 'todo',
+          assignee_role: 'designer'
+        },
+        {
+          title: '搭建前端项目框架',
+          description: '搭建Vue.js项目框架，配置开发环境',
+          priority: 'high',
+          status: 'todo',
+          assignee_role: 'developer'
+        },
+        {
+          title: '设计数据库结构',
+          description: '设计项目数据库的表结构和关系',
+          priority: 'medium',
+          status: 'todo',
+          assignee_role: 'developer'
+        },
+        {
+          title: '编写单元测试用例',
+          description: '为核心功能编写单元测试用例',
+          priority: 'medium',
+          status: 'todo',
+          assignee_role: 'tester'
+        },
+        {
+          title: '项目文档编写',
+          description: '编写项目技术文档和使用说明',
+          priority: 'low',
+          status: 'todo',
+          assignee_role: 'developer'
+        }
+      ]
+
+      for (const taskData of sampleTasks) {
+        // 根据角色分配任务给对应的成员
+        const assignee = teamMembers.find(member => member.project_role === taskData.assignee_role)
+        
+        if (assignee) {
+          await TaskService.createTask({
+            title: taskData.title,
+            description: taskData.description,
+            project_id: projectId,
+            assignee_id: assignee.id,
+            reporter_id: teamMembers.find(m => m.project_role === 'manager')?.id || assignee.id,
+            status: taskData.status as any,
+            priority: taskData.priority as any,
+            due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 7天后
+          })
+        }
+      }
+      
+      console.log(`✅ 为示例团队创建了 ${sampleTasks.length} 个示例任务`)
+    } catch (error) {
+      console.error('Error creating sample tasks:', error)
+      // 不抛出错误，因为创建任务是可选功能
     }
   }
 }

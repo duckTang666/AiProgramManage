@@ -17,7 +17,7 @@ export const useOrganizationStore = defineStore('organization', () => {
         return
       }
       
-      const data = await OrganizationService.getUserOrganizations(userId.toString())
+      const data = await OrganizationService.getUserOrganizations(userId)
       organizations.value = data || []
     } catch (error) {
       console.error('Error fetching organizations:', error)
@@ -57,12 +57,57 @@ export const useOrganizationStore = defineStore('organization', () => {
     }
   }
 
+  async function updateOrganization(id: number, updateData: { name?: string; description?: string; is_active?: boolean }) {
+    try {
+      console.log('📝 开始更新组织:', id, updateData)
+      const data = await OrganizationService.updateOrganization(id, updateData)
+      console.log('✅ 组织更新成功:', data)
+      
+      // 更新组织列表中的对应组织
+      const index = organizations.value.findIndex(org => org.id === id)
+      if (index !== -1) {
+        organizations.value[index] = { ...organizations.value[index], ...updateData }
+      }
+      
+      // 如果当前组织被更新，也更新当前组织
+      if (currentOrganization.value?.id === id) {
+        currentOrganization.value = { ...currentOrganization.value, ...updateData }
+      }
+      
+      return data
+    } catch (error) {
+      console.error('❌ 更新组织失败:', error)
+      throw error
+    }
+  }
+
+  async function deleteOrganization(id: number) {
+    try {
+      console.log('🗑️ 开始删除组织:', id)
+      await OrganizationService.deleteOrganization(id)
+      console.log('✅ 组织删除成功')
+      
+      // 从组织列表中移除
+      organizations.value = organizations.value.filter(org => org.id !== id)
+      
+      // 如果当前组织被删除，清空当前组织
+      if (currentOrganization.value?.id === id) {
+        currentOrganization.value = null
+      }
+    } catch (error) {
+      console.error('❌ 删除组织失败:', error)
+      throw error
+    }
+  }
+
   return {
     organizations,
     currentOrganization,
     isLoading,
     fetchOrganizations,
     createOrganization,
-    fetchOrganizationById
+    fetchOrganizationById,
+    updateOrganization,
+    deleteOrganization
   }
 })

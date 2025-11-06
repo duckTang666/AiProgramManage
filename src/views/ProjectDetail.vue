@@ -27,24 +27,52 @@
       <div class="px-4 py-6 sm:px-0">
         <!-- 项目信息 -->
         <div class="card p-6 mb-6">
-          <h2 class="text-lg font-semibold mb-2">项目信息</h2>
-          <p class="text-gray-600 mb-4">{{ project?.description || '暂无描述' }}</p>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <h2 class="text-lg font-semibold mb-4">项目信息</h2>
+          <p class="text-gray-600 mb-6">{{ project?.description || '暂无描述' }}</p>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <span class="text-gray-500">创建时间:</span>
-              <p class="font-medium">{{ formatDate(project?.created_at) }}</p>
+              <h3 class="text-md font-medium text-gray-900 mb-3">基本信息</h3>
+              <div class="space-y-3">
+                <div>
+                  <span class="text-sm text-gray-500">项目名称:</span>
+                  <p class="font-medium">{{ project?.name || '未设置' }}</p>
+                </div>
+                <div>
+                  <span class="text-sm text-gray-500">项目描述:</span>
+                  <p class="text-gray-700">{{ project?.description || '暂无描述' }}</p>
+                </div>
+                <div>
+                  <span class="text-sm text-gray-500">项目状态:</span>
+                  <p class="font-medium">{{ statusText(project?.status) }}</p>
+                </div>
+                <div>
+                  <span class="text-sm text-gray-500">项目优先级:</span>
+                  <p class="font-medium">{{ getPriorityText(project?.priority) }}</p>
+                </div>
+              </div>
             </div>
+            
             <div>
-              <span class="text-gray-500">更新时间:</span>
-              <p class="font-medium">{{ formatDate(project?.updated_at) }}</p>
-            </div>
-            <div>
-              <span class="text-gray-500">任务总数:</span>
-              <p class="font-medium">{{ taskStats.total }}</p>
-            </div>
-            <div>
-              <span class="text-gray-500">完成率:</span>
-              <p class="font-medium">{{ taskStats.completionRate }}%</p>
+              <h3 class="text-md font-medium text-gray-900 mb-3">时间信息</h3>
+              <div class="space-y-3">
+                <div>
+                  <span class="text-sm text-gray-500">创建时间:</span>
+                  <p class="font-medium">{{ project?.created_at ? formatDate(project.created_at) : '未设置' }}</p>
+                </div>
+                <div>
+                  <span class="text-sm text-gray-500">更新时间:</span>
+                  <p class="font-medium">{{ project?.updated_at ? formatDate(project.updated_at) : '未设置' }}</p>
+                </div>
+                <div>
+                  <span class="text-sm text-gray-500">结束时间:</span>
+                  <p class="font-medium">{{ project?.end_date ? formatDate(project.end_date) : '未设置' }}</p>
+                </div>
+                <div>
+                  <span class="text-sm text-gray-500">项目进度:</span>
+                  <p class="font-medium">{{ project?.progress_percentage || 0 }}%</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -79,9 +107,26 @@
         <div class="card p-6 mb-6">
           <div class="flex justify-between items-center mb-4">
             <h2 class="text-lg font-semibold">团队成员</h2>
-            <button @click="showAddMemberModal = true" class="btn btn-primary text-sm">
-              添加成员
-            </button>
+            <div class="flex space-x-2">
+              <button @click="showAddMemberModal = true" class="btn btn-primary text-sm">
+                添加成员
+              </button>
+              <button 
+                v-if="memberStore.members.length === 0" 
+                @click="generateSampleTeam" 
+                class="btn btn-secondary text-sm"
+                :disabled="isGeneratingSample"
+              >
+                {{ isGeneratingSample ? '生成中...' : '生成示例团队' }}
+              </button>
+              <button 
+                v-if="memberStore.members.length > 0" 
+                @click="showTeamStats = !showTeamStats" 
+                class="btn btn-outline text-sm"
+              >
+                {{ showTeamStats ? '隐藏统计' : '显示统计' }}
+              </button>
+            </div>
           </div>
           
           <div v-if="memberStore.isLoading" class="text-center py-4">
@@ -95,6 +140,37 @@
             </svg>
             <h3 class="mt-2 text-sm font-medium text-gray-900">暂无团队成员</h3>
             <p class="mt-1 text-sm text-gray-500">添加成员开始协作</p>
+          </div>
+          
+          <div v-if="generateSampleError" class="text-red-600 text-sm mb-4">
+            {{ generateSampleError }}
+          </div>
+          
+          <div v-if="generateSampleError" class="text-red-600 text-sm mb-4">
+            {{ generateSampleError }}
+          </div>
+          
+          <!-- 团队统计信息 -->
+          <div v-if="showTeamStats && memberStore.members.length > 0" class="mb-6 p-4 bg-gray-50 rounded-lg">
+            <h3 class="text-md font-semibold mb-3">团队统计</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div class="text-center">
+                <div class="text-2xl font-bold text-blue-600">{{ teamStats.total }}</div>
+                <div class="text-sm text-gray-600">总人数</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-green-600">{{ teamStats.developers }}</div>
+                <div class="text-sm text-gray-600">开发人员</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-purple-600">{{ teamStats.designers }}</div>
+                <div class="text-sm text-gray-600">设计师</div>
+              </div>
+              <div class="text-center">
+                <div class="text-2xl font-bold text-orange-600">{{ teamStats.testers }}</div>
+                <div class="text-sm text-gray-600">测试人员</div>
+              </div>
+            </div>
           </div>
           
           <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -164,6 +240,102 @@
           </div>
         </div>
 
+        <!-- 任务列表 -->
+        <div class="card p-6 mb-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-semibold">任务列表</h2>
+            <div class="flex space-x-2">
+              <select v-model="taskFilter" class="input text-sm">
+                <option value="all">全部任务</option>
+                <option value="todo">待办</option>
+                <option value="in_progress">进行中</option>
+                <option value="review">审核中</option>
+                <option value="done">已完成</option>
+                <option value="cancelled">已取消</option>
+              </select>
+              <button @click="showCreateTaskModal = true" class="btn btn-primary text-sm">
+                创建任务
+              </button>
+            </div>
+          </div>
+          
+          <div v-if="tasksLoading" class="text-center py-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p class="mt-2 text-sm text-gray-600">加载任务中...</p>
+          </div>
+          
+          <div v-else-if="filteredTasks.length === 0" class="text-center py-8">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">暂无任务</h3>
+            <p class="mt-1 text-sm text-gray-500">创建第一个任务开始工作</p>
+            <button @click="showCreateTaskModal = true" class="mt-4 btn btn-primary">
+              创建任务
+            </button>
+          </div>
+          
+          <div v-else class="space-y-3">
+            <div 
+              v-for="task in filteredTasks" 
+              :key="task.id"
+              class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+            >
+              <div class="flex justify-between items-start mb-2">
+                <h3 class="font-medium text-gray-900">{{ task.title }}</h3>
+                <div class="flex space-x-2">
+                  <span :class="[
+                    'px-2 py-1 rounded-full text-xs font-medium',
+                    task.priority === 'high' ? 'bg-red-100 text-red-800' :
+                    task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-green-100 text-green-800'
+                  ]">
+                    {{ getPriorityText(task.priority) }}
+                  </span>
+                  <span :class="[
+                    'px-2 py-1 rounded-full text-xs font-medium',
+                    task.status === 'done' ? 'bg-green-100 text-green-800' :
+                    task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                    task.status === 'review' ? 'bg-purple-100 text-purple-800' :
+                    task.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
+                    'bg-orange-100 text-orange-800'
+                  ]">
+                    {{ getStatusText(task.status) }}
+                  </span>
+                  <button 
+                    @click="openEditTaskModal(task)"
+                    class="flex items-center space-x-1 px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                    title="编辑任务"
+                  >
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span>编辑</span>
+                  </button>
+                </div>
+              </div>
+              
+              <p v-if="task.description" class="text-sm text-gray-600 mb-3 line-clamp-2">
+                {{ task.description }}
+              </p>
+              
+              <div class="flex justify-between items-center text-xs text-gray-500">
+                <div class="flex items-center space-x-4">
+                  <span v-if="task.assignee">
+                    负责人: {{ task.assignee.display_name }}
+                  </span>
+                  <span v-if="task.due_date">
+                    截止: {{ formatDate(task.due_date) }}
+                  </span>
+                </div>
+                <span>
+                  创建: {{ formatDate(task.created_at) }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 快速操作 -->
         <div class="card p-6">
           <h2 class="text-lg font-semibold mb-4">快速操作</h2>
@@ -174,8 +346,8 @@
             <button @click="generateReport" class="btn btn-secondary">
               生成项目报告
             </button>
-            <button @click="showCreateTaskModal = true" class="btn btn-secondary">
-              创建任务
+            <button @click="refreshTasks" class="btn btn-secondary">
+              刷新任务
             </button>
           </div>
         </div>
@@ -494,15 +666,176 @@
         </div>
       </div>
     </div>
+
+    <!-- 编辑任务窗体 -->
+    <div v-if="showEditTaskModal" class="fixed inset-0 z-50 overflow-hidden">
+      <!-- 背景遮罩 -->
+      <div class="absolute inset-0 bg-black bg-opacity-50 transition-opacity" @click="closeEditTaskModal"></div>
+      
+      <!-- 窗体容器 -->
+      <div class="absolute inset-y-0 right-0 max-w-lg w-full bg-white shadow-xl transform transition-transform duration-300 ease-in-out">
+        <!-- 窗体头部 -->
+        <div class="flex items-center justify-between p-6 border-b border-gray-200">
+          <div class="flex items-center space-x-3">
+            <div class="p-2 bg-blue-100 rounded-lg">
+              <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">编辑任务</h3>
+              <p class="text-sm text-gray-500" v-if="editingTask">ID: {{ editingTask.id }}</p>
+            </div>
+          </div>
+          
+          <div class="flex items-center space-x-2">
+            <button 
+              @click="saveTaskChanges" 
+              :disabled="!editTaskTitle.trim()" 
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+            >
+              保存
+            </button>
+            <button 
+              @click="closeEditTaskModal" 
+              class="p-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <!-- 窗体内容 -->
+        <div class="p-6 overflow-y-auto" style="height: calc(100vh - 80px)">
+          <div class="space-y-6">
+            <!-- 基本信息区域 -->
+            <div class="bg-gray-50 p-4 rounded-lg">
+              <h4 class="text-sm font-semibold text-gray-700 mb-3">基本信息</h4>
+              
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">任务标题 *</label>
+                  <input 
+                    v-model="editTaskTitle" 
+                    type="text" 
+                    class="input w-full" 
+                    placeholder="请输入任务标题"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">任务描述</label>
+                  <textarea 
+                    v-model="editTaskDescription" 
+                    class="input w-full resize-none" 
+                    rows="4" 
+                    placeholder="请输入任务描述"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <!-- 详细设置区域 -->
+            <div class="bg-gray-50 p-4 rounded-lg">
+              <h4 class="text-sm font-semibold text-gray-700 mb-3">详细设置</h4>
+              
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">负责人</label>
+                  <select v-model="editTaskAssignee" class="input w-full">
+                    <option value="">不指定负责人</option>
+                    <option 
+                      v-for="member in memberStore.members" 
+                      :key="member.id" 
+                      :value="member.user_id"
+                    >
+                      {{ member.user?.display_name || '未知用户' }}
+                    </option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">优先级</label>
+                  <select v-model="editTaskPriority" class="input w-full">
+                    <option value="low">低</option>
+                    <option value="medium">中</option>
+                    <option value="high">高</option>
+                    <option value="urgent">紧急</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">状态</label>
+                  <select v-model="editTaskStatus" class="input w-full">
+                    <option value="todo">待办</option>
+                    <option value="in_progress">进行中</option>
+                    <option value="review">审核中</option>
+                    <option value="done">已完成</option>
+                    <option value="cancelled">已取消</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">截止日期</label>
+                  <input 
+                    v-model="editTaskDueDate" 
+                    type="date" 
+                    class="input w-full" 
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <!-- 任务统计信息 -->
+            <div v-if="editingTask" class="bg-gray-50 p-4 rounded-lg">
+              <h4 class="text-sm font-semibold text-gray-700 mb-3">任务信息</h4>
+              
+              <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span class="text-gray-500">创建时间:</span>
+                  <p class="font-medium">{{ formatDate(editingTask.created_at) }}</p>
+                </div>
+                <div>
+                  <span class="text-gray-500">更新时间:</span>
+                  <p class="font-medium">{{ formatDate(editingTask.updated_at) }}</p>
+                </div>
+                <div>
+                  <span class="text-gray-500">报告人:</span>
+                  <p class="font-medium">{{ editingTask.reporter?.display_name || '未知' }}</p>
+                </div>
+                <div>
+                  <span class="text-gray-500">项目:</span>
+                  <p class="font-medium">{{ project?.name }}</p>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 错误信息 -->
+            <div v-if="editTaskError" class="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <div class="flex items-center">
+                <svg class="w-5 h-5 text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                </svg>
+                <span class="text-red-700 text-sm">{{ editTaskError }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useProjectStore } from '@/stores/project'
 import { useProjectMemberStore } from '@/stores/projectMember'
 import { useAuthStore } from '@/stores/auth'
+import { TaskService, type Task } from '@/lib/database'
 
 const route = useRoute()
 const projectStore = useProjectStore()
@@ -520,6 +853,8 @@ const showAddMemberModal = ref(false)
 const showEditMemberModal = ref(false)
 const showAssignTaskModal = ref(false)
 const showCreateTaskModal = ref(false)
+const showTeamStats = ref(false)
+const isGeneratingSample = ref(false)
 
 const selectedUser = ref('')
 const selectedRole = ref('')
@@ -531,6 +866,7 @@ const addMemberError = ref('')
 const editMemberError = ref('')
 const assignTaskError = ref('')
 const createTaskError = ref('')
+const generateSampleError = ref('')
 
 // 任务相关状态
 const taskTitle = ref('')
@@ -543,6 +879,22 @@ const newTaskDescription = ref('')
 const newTaskAssignee = ref('')
 const newTaskPriority = ref('medium')
 const newTaskDueDate = ref('')
+
+// 任务编辑状态
+const showEditTaskModal = ref(false)
+const editingTask = ref<Task | null>(null)
+const editTaskTitle = ref('')
+const editTaskDescription = ref('')
+const editTaskAssignee = ref('')
+const editTaskPriority = ref('medium')
+const editTaskStatus = ref('todo')
+const editTaskDueDate = ref('')
+const editTaskError = ref('')
+
+// 任务相关状态
+const tasks = ref<Task[]>([])
+const tasksLoading = ref(false)
+const taskFilter = ref('all')
 
 const taskStats = reactive({
   total: 0,
@@ -558,6 +910,26 @@ const aiSuggestions = ref([
   { id: 3, message: '团队成员工作负荷均衡，效率较高' }
 ])
 
+// 计算过滤后的任务列表
+const filteredTasks = computed(() => {
+  if (taskFilter.value === 'all') {
+    return tasks.value
+  }
+  return tasks.value.filter(task => task.status === taskFilter.value)
+})
+
+// 计算团队统计信息
+const teamStats = computed(() => {
+  const stats = {
+    total: memberStore.members.length,
+    managers: memberStore.members.filter(m => m.role === 'manager').length,
+    developers: memberStore.members.filter(m => m.role === 'developer').length,
+    designers: memberStore.members.filter(m => m.role === 'designer').length,
+    testers: memberStore.members.filter(m => m.role === 'tester').length
+  }
+  return stats
+})
+
 const editProject = reactive({
   name: '',
   description: '',
@@ -565,7 +937,12 @@ const editProject = reactive({
 })
 
 function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString('zh-CN')
+  if (!dateString) return '未设置'
+  
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return '无效日期'
+  
+  return date.toLocaleDateString('zh-CN')
 }
 
 function statusClass(status: string) {
@@ -580,9 +957,11 @@ function statusClass(status: string) {
 
 function statusText(status: string) {
   const texts = {
+    planning: '规划中',
     active: '活跃',
-    paused: '暂停',
     completed: '已完成',
+    cancelled: '已取消',
+    paused: '暂停',
     archived: '已归档'
   }
   return texts[status] || status
@@ -596,8 +975,57 @@ function generateReport() {
   console.log('生成项目报告')
 }
 
-function manageTasks() {
-  console.log('管理任务')
+function getPriorityText(priority: string) {
+  const priorityMap: Record<string, string> = {
+    'low': '低',
+    'medium': '中',
+    'high': '高',
+    'urgent': '紧急'
+  }
+  return priorityMap[priority] || priority
+}
+
+function getStatusText(status: string) {
+  const statusMap: Record<string, string> = {
+    'todo': '待办',
+    'in_progress': '进行中',
+    'review': '审核中',
+    'done': '已完成',
+    'cancelled': '已取消'
+  }
+  return statusMap[status] || status
+}
+
+function openTaskDetail(task: Task) {
+  console.log('打开任务详情:', task)
+  // 这里可以添加跳转到任务详情页面的逻辑
+  // router.push(`/tasks/${task.id}`)
+}
+
+async function fetchTasks() {
+  const projectId = parseInt(route.params.id as string)
+  tasksLoading.value = true
+  
+  try {
+    const taskList = await TaskService.getTasksByProject(projectId)
+    tasks.value = taskList
+    
+    // 更新任务统计
+    const stats = await TaskService.getTaskStats(projectId)
+    taskStats.total = stats.total
+    taskStats.pending = stats.pending
+    taskStats.inProgress = stats.inProgress
+    taskStats.completed = stats.completed
+    taskStats.completionRate = stats.completionRate
+  } catch (error) {
+    console.error('Error fetching tasks:', error)
+  } finally {
+    tasksLoading.value = false
+  }
+}
+
+async function refreshTasks() {
+  await fetchTasks()
 }
 
 // 成员管理相关函数
@@ -719,12 +1147,29 @@ async function createTask() {
   createTaskError.value = ''
 
   try {
+    // 获取数据库用户ID
+    const { UserService } = await import('@/lib/database')
+    let reporterId = 125 // 默认使用用户ID 125
+    
+    // 尝试通过邮箱获取用户ID
+    const userEmail = authStore.user?.email
+    if (userEmail) {
+      try {
+        const userRecord = await UserService.getUserByEmail(userEmail)
+        if (userRecord?.id) {
+          reporterId = userRecord.id
+        }
+      } catch (error) {
+        console.warn('通过邮箱查询用户失败，使用默认ID 125:', error)
+      }
+    }
+    
     await memberStore.createTaskWithAssignment({
       title: newTaskTitle.value,
       description: newTaskDescription.value,
       project_id: parseInt(route.params.id as string),
       assignee_id: newTaskAssignee.value ? parseInt(newTaskAssignee.value) : undefined,
-      reporter_id: authStore.user?.id || 0,
+      reporter_id: reporterId,
       status: 'todo',
       priority: newTaskPriority.value,
       due_date: newTaskDueDate.value || undefined
@@ -744,6 +1189,111 @@ async function createTask() {
   }
 }
 
+// 任务编辑功能
+function openEditTaskModal(task: Task) {
+  editingTask.value = task
+  editTaskTitle.value = task.title
+  editTaskDescription.value = task.description || ''
+  editTaskAssignee.value = task.assignee_id ? task.assignee_id.toString() : ''
+  editTaskPriority.value = task.priority || 'medium'
+  editTaskStatus.value = task.status || 'todo'
+  editTaskDueDate.value = task.due_date ? formatDateForInput(task.due_date) : ''
+  editTaskError.value = ''
+  showEditTaskModal.value = true
+}
+
+function closeEditTaskModal() {
+  showEditTaskModal.value = false
+  editingTask.value = null
+  editTaskTitle.value = ''
+  editTaskDescription.value = ''
+  editTaskAssignee.value = ''
+  editTaskPriority.value = 'medium'
+  editTaskStatus.value = 'todo'
+  editTaskDueDate.value = ''
+  editTaskError.value = ''
+}
+
+async function saveTaskChanges() {
+  if (!editTaskTitle.value.trim()) {
+    editTaskError.value = '请输入任务标题'
+    return
+  }
+
+  if (!editingTask.value) {
+    editTaskError.value = '未找到要编辑的任务'
+    return
+  }
+
+  editTaskError.value = ''
+
+  try {
+    // 更新任务信息
+    await TaskService.updateTask(editingTask.value.id, {
+      title: editTaskTitle.value,
+      description: editTaskDescription.value,
+      assignee_id: editTaskAssignee.value ? parseInt(editTaskAssignee.value) : undefined,
+      priority: editTaskPriority.value,
+      status: editTaskStatus.value,
+      due_date: editTaskDueDate.value || undefined
+    })
+    
+    // 重新加载任务列表
+    await fetchTasks()
+    
+    // 关闭模态框
+    closeEditTaskModal()
+    
+    alert('任务更新成功！')
+  } catch (error: any) {
+    editTaskError.value = error.message || '更新任务失败'
+    console.error('Error updating task:', error)
+  }
+}
+
+function formatDateForInput(dateString: string) {
+  if (!dateString) return ''
+  
+  const date = new Date(dateString)
+  return date.toISOString().split('T')[0]
+}
+
+// 生成示例团队成员
+async function generateSampleTeam() {
+  if (!project.value?.organization_id) {
+    generateSampleError.value = '项目没有关联的组织，无法生成示例团队'
+    return
+  }
+
+  if (!confirm('这将生成7个示例团队成员和6个示例任务。确定要继续吗？')) {
+    return
+  }
+
+  isGeneratingSample.value = true
+  generateSampleError.value = ''
+
+  try {
+    const result = await memberStore.generateSampleTeamMembers(
+      project.value.organization_id,
+      parseInt(route.params.id as string)
+    )
+    
+    // 重新加载任务列表
+    await fetchTasks()
+    
+    alert(`✅ 示例团队生成成功！
+
+创建了 ${result.length} 个团队成员
+自动生成了6个示例任务
+
+现在可以开始项目协作了！`)
+  } catch (error: any) {
+    generateSampleError.value = error.message || '生成示例团队失败'
+  } finally {
+    isGeneratingSample.value = false
+  }
+}
+
 async function updateProject() {
   if (!editProject.name.trim()) {
     editError.value = '请输入项目名称'
@@ -754,7 +1304,7 @@ async function updateProject() {
   editError.value = ''
 
   try {
-    await projectStore.updateProject(route.params.id as string, editProject)
+    await projectStore.updateProject(parseInt(route.params.id as string), editProject)
     showEditModal.value = false
   } catch (error: any) {
     editError.value = error.message || '更新项目失败'
@@ -767,9 +1317,15 @@ onMounted(async () => {
   const projectId = route.params.id as string
   
   try {
-    const response = await projectStore.fetchProjectById(projectId)
-    if (response.success) {
-      project.value = projectStore.currentProject
+    console.log('🚀 开始加载项目详情，项目ID:', projectId)
+    
+    // 使用项目存储获取项目详情
+    const result = await projectStore.fetchProjectById(projectId)
+    
+    if (result.success && result.data) {
+      project.value = result.data
+      
+      console.log('✅ 项目详情加载成功:', result.data)
       
       // 初始化编辑表单
       editProject.name = project.value.name
@@ -777,22 +1333,27 @@ onMounted(async () => {
       editProject.status = project.value.status
       
       // 加载项目成员
+      console.log('🔍 开始加载项目成员...')
       await memberStore.fetchProjectMembers(parseInt(projectId))
+      console.log('✅ 项目成员加载完成，数量:', memberStore.members.length)
       
       // 如果有组织ID，加载可添加的用户列表
       if (project.value.organization_id) {
+        console.log('🔍 开始加载可添加的用户列表...')
         await memberStore.fetchAvailableUsers(project.value.organization_id, parseInt(projectId))
+        console.log('✅ 可添加用户列表加载完成，数量:', memberStore.availableUsers.length)
       }
       
-      // 模拟任务统计数据
-      taskStats.total = 15
-      taskStats.pending = 3
-      taskStats.inProgress = 5
-      taskStats.completed = 7
-      taskStats.completionRate = Math.round((taskStats.completed / taskStats.total) * 100)
+      // 加载任务列表和统计数据
+      console.log('🔍 开始加载任务列表...')
+      await fetchTasks()
+      console.log('✅ 任务列表加载完成，数量:', tasks.value.length)
+    } else {
+      console.error('❌ 项目详情加载失败: 项目不存在')
+      // 可以添加错误处理，比如跳转到404页面
     }
   } catch (error) {
-    console.error('Error loading project detail:', error)
+    console.error('❌ 加载项目详情失败:', error)
   } finally {
     isLoading.value = false
   }

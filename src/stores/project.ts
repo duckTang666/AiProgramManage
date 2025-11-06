@@ -10,11 +10,13 @@ export const useProjectStore = defineStore('project', () => {
   async function fetchProjects(organizationId: number) {
     isLoading.value = true
     try {
-      const data = await ProjectService.getOrganizationProjects(organizationId)
+      const data = await ProjectService.getProjectsByOrganization(organizationId)
       projects.value = data || []
+      return { success: true, data: projects.value }
     } catch (error) {
       console.error('Error fetching projects:', error)
-      throw error
+      projects.value = []
+      return { success: false, error }
     } finally {
       isLoading.value = false
     }
@@ -41,15 +43,16 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
-  async function fetchProjectById(id: number) {
+  async function fetchProjectById(id: string | number) {
     isLoading.value = true
     try {
-      const data = await ProjectService.getProjectById(id)
+      const projectId = typeof id === 'string' ? parseInt(id) : id
+      const data = await ProjectService.getProjectById(projectId)
       currentProject.value = data
-      return data
+      return { success: true, data }
     } catch (error) {
       console.error('Error fetching project:', error)
-      throw error
+      return { success: false, error }
     } finally {
       isLoading.value = false
     }

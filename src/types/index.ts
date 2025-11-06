@@ -20,6 +20,8 @@ export interface Organization {
   logo_url?: string
   owner_id: number
   is_active: boolean
+  project_count?: number
+  member_count?: number
   created_at: string
   updated_at: string
 }
@@ -53,6 +55,8 @@ export interface Task {
   project_id: number
   assignee_id?: number
   reporter_id: number
+  assignee?: User
+  reporter?: User
   created_at: string
   updated_at: string
 }
