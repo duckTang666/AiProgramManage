@@ -9,7 +9,7 @@
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
+    "noEmit": false,
     "jsx": "preserve",
     "strict": true,
     "noUnusedLocals": true,
@@ -19,7 +19,8 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "composite": true
+    "composite": true,
+    "emitDeclarationOnly": true
   },
   "include": ["env.d.ts", "src/**/*", "src/**/*.vue"],
   "exclude": ["src/**/__tests__/*"]
