@@ -719,48 +719,6 @@
       </div>
     </div>
 
-    <!-- 删除任务确认模态框 -->
-    <div v-if="showDeleteTaskConfirmModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-lg max-w-md w-full p-6">
-        <div class="flex items-center mb-4">
-          <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mr-3">
-            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-            </svg>
-          </div>
-          <h3 class="text-lg font-semibold text-gray-900">确认删除</h3>
-        </div>
-        
-        <p class="text-gray-600 mb-6">
-          确定要删除任务 <span class="font-semibold text-gray-900">"{{ taskToDelete?.title }}"</span> 吗？
-          此操作无法撤销。
-        </p>
-
-        <div v-if="deleteTaskError" class="text-red-600 text-sm mb-4 p-3 bg-red-50 rounded-lg">
-          {{ deleteTaskError }}
-        </div>
-
-        <div class="flex justify-end space-x-3">
-          <button
-            type="button"
-            @click="cancelDeleteTask"
-            :disabled="isDeletingTask"
-            class="btn btn-secondary"
-          >
-            取消
-          </button>
-          <button
-            type="button"
-            @click="deleteTask"
-            :disabled="isDeletingTask"
-            class="btn btn-danger"
-          >
-            {{ isDeletingTask ? '删除中...' : '确认删除' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- 编辑任务窗体 -->
     <div v-if="showEditTaskModal" class="fixed inset-0 z-50 overflow-hidden">
       <!-- 背景遮罩 -->
@@ -1374,6 +1332,53 @@ function formatDateForInput(dateString: string) {
   
   const date = new Date(dateString)
   return date.toISOString().split('T')[0]
+}
+
+// 任务删除功能
+function confirmDeleteTask(task: Task) {
+  taskToDelete.value = task
+  showDeleteTaskConfirmModal.value = true
+  deleteTaskError.value = ''
+}
+
+function cancelDeleteTask() {
+  showDeleteTaskConfirmModal.value = false
+  taskToDelete.value = null
+  deleteTaskError.value = ''
+}
+
+async function deleteTask() {
+  if (!taskToDelete.value) {
+    deleteTaskError.value = '未找到要删除的任务'
+    return
+  }
+
+  isDeletingTask.value = true
+  deleteTaskError.value = ''
+
+  try {
+    console.log('🗑️ 开始删除任务:', taskToDelete.value.id)
+    
+    // 调用任务服务删除任务
+    await TaskService.deleteTask(taskToDelete.value.id)
+    
+    // 重新加载任务列表和统计数据
+    await fetchTasks()
+    
+    // 关闭模态框并重置状态
+    showDeleteTaskConfirmModal.value = false
+    taskToDelete.value = null
+    
+    console.log('✅ 任务删除成功')
+    
+    // 显示成功提示
+    alert('任务删除成功！')
+  } catch (error: any) {
+    console.error('❌ 删除任务失败:', error)
+    deleteTaskError.value = error.message || '删除任务失败，请稍后重试'
+  } finally {
+    isDeletingTask.value = false
+  }
 }
 
 // 生成示例团队成员
