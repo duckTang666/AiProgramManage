@@ -53,7 +53,13 @@ export const useAuthStore = defineStore('auth', () => {
   // 确保用户记录存在（带缓存检查）
   async function ensureUserRecordExists(authUser: User) {
     try {
-      await UserService.getUserByAuthId(authUser.id)
+      // 首先尝试通过邮箱查询用户记录
+      if (authUser.email) {
+        await UserService.getUserByEmail(authUser.email)
+      } else {
+        // 如果没有邮箱，则尝试通过auth_id查询
+        await UserService.getUserByAuthId(authUser.id)
+      }
     } catch (error) {
       // 用户记录不存在，自动创建用户记录
       await UserService.createUser({

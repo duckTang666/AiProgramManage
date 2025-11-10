@@ -10,11 +10,23 @@
             </RouterLink>
           </div>
           <div class="flex items-center space-x-4">
-            <button @click="showCreateModal = true" class="btn btn-primary">
-              创建组织
+            <div class="text-sm text-gray-600 bg-gray-100 px-3 py-1 rounded">
+              当前用户: ID 125
+            </div>
+            <button @click="loadUser125Organizations" class="btn btn-outline text-sm">
+              加载用户125组织
+            </button>
+            <button @click="loadAllOrganizations" class="btn btn-outline text-sm">
+              加载所有组织
+            </button>
+            <button v-if="showUserInfoBtn" @click="showUserInfoModal = true" class="btn btn-outline text-sm">
+              查询用户信息
             </button>
             <button @click="logout" class="btn btn-outline text-sm">
               退出登录
+            </button>
+            <button @click="showCreateModal = true" class="btn btn-primary">
+              创建组织
             </button>
           </div>
         </div>
@@ -26,10 +38,111 @@
       <div class="px-4 py-6 sm:px-0">
         <h1 class="text-2xl font-bold text-gray-900 mb-6">组织管理</h1>
         
+        <!-- 搜索和过滤区域 -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
+          <div class="flex flex-col sm:flex-row gap-4 items-center">
+            <!-- 数据状态提示 -->
+            <div class="flex items-center space-x-2 text-sm">
+              <span class="font-medium text-gray-700">数据源:</span>
+              <span :class="organizations && organizations.length > 0 ? 'text-green-600' : 'text-blue-600'" class="font-medium">
+                {{ organizations && organizations.length > 0 ? '数据库' : '示例数据' }}
+              </span>
+              <span class="text-gray-500">({{ filteredOrganizations.length }} 个组织)</span>
+            </div>
+            
+            <!-- 搜索框 -->
+            <div class="relative flex-1 min-w-0">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <input
+                v-model="searchQuery"
+                type="text"
+                class="pl-10 pr-10 py-2 border border-gray-300 rounded-lg w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="搜索组织名称或描述..."
+              />
+              <!-- 清除搜索按钮 -->
+              <button
+                v-if="searchQuery"
+                @click="searchQuery = ''"
+                class="absolute inset-y-0 right-0 pr-3 flex items-center"
+              >
+                <svg class="h-4 w-4 text-gray-400 hover:text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- 状态过滤器 -->
+            <div class="flex items-center space-x-2">
+              <label class="text-sm font-medium text-gray-700 whitespace-nowrap">状态:</label>
+              <select
+                v-model="statusFilter"
+                class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="all">全部</option>
+                <option value="active">活跃</option>
+                <option value="inactive">已停用</option>
+              </select>
+            </div>
+
+            <!-- 排序方式 -->
+            <div class="flex items-center space-x-2">
+              <label class="text-sm font-medium text-gray-700 whitespace-nowrap">排序:</label>
+              <select
+                v-model="sortBy"
+                class="border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="created_at">创建时间</option>
+                <option value="name">名称</option>
+                <option value="project_count">项目数</option>
+                <option value="member_count">成员数</option>
+              </select>
+              <button
+                @click="sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'"
+                class="p-2 text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg hover:border-gray-400"
+                :class="{ 'text-blue-600 border-blue-300': sortOrder === 'asc' }"
+              >
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path v-if="sortOrder === 'desc'" fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  <path v-else fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- 清除筛选 -->
+            <button
+              v-if="hasActiveFilters"
+              @click="clearFilters"
+              class="text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg px-3 py-2 hover:border-gray-400"
+            >
+              清除筛选
+            </button>
+          </div>
+
+          <!-- 搜索结果统计 -->
+          <div v-if="hasActiveFilters" class="mt-3 pt-3 border-t border-gray-100">
+            <p class="text-sm text-gray-600">
+              找到 <span class="font-semibold text-blue-600">{{ filteredOrganizations.length }}</span> 个组织
+              <span v-if="searchQuery">（关键词: "{{ searchQuery }}"）</span>
+              <span v-if="statusFilter !== 'all'">（状态: {{ statusFilter === 'active' ? '活跃' : '已停用' }}）</span>
+            </p>
+          </div>
+        </div>
+        
+        <!-- 加载状态 -->
+        <div v-if="isLoading" class="text-center py-12">
+          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <p class="mt-2 text-sm text-gray-600">加载中...</p>
+        </div>
+
         <!-- 组织列表 -->
-        <div v-if="!isLoading && organizations.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- 组织卡片 -->
           <div 
-            v-for="org in organizations" 
+            v-for="org in sortedOrganizations" 
             :key="org.id"
             class="card p-6 hover:shadow-md transition-shadow"
           >
@@ -113,23 +226,36 @@
         </div>
 
         <!-- 空状态 -->
-        <div v-else-if="!isLoading" class="text-center py-12">
+        <div v-if="!isLoading && sortedOrganizations.length === 0" class="text-center py-12">
           <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-2m2 0v-2m0 2v2M7 21h2m-2 0H5m2 0v-2m0 2v2" />
           </svg>
-          <h3 class="mt-2 text-sm font-medium text-gray-900">暂无组织</h3>
-          <p class="mt-1 text-sm text-gray-500">创建您的第一个组织开始管理项目</p>
-          <div class="mt-6">
-            <button @click="showCreateModal = true" class="btn btn-primary">
-              创建组织
-            </button>
-          </div>
-        </div>
-
-        <!-- 加载状态 -->
-        <div v-else class="text-center py-12">
-          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p class="mt-2 text-sm text-gray-600">加载中...</p>
+          
+          <!-- 根据是否使用搜索显示不同的提示信息 -->
+          <template v-if="hasActiveFilters">
+            <h3 class="mt-2 text-sm font-medium text-gray-900">未找到匹配的组织</h3>
+            <p class="mt-1 text-sm text-gray-500">
+              没有找到与您的搜索条件匹配的组织
+              <span v-if="searchQuery">（关键词: "{{ searchQuery }}"）</span>
+            </p>
+            <div class="mt-6">
+              <button @click="clearFilters" class="btn btn-primary mr-2">
+                清除搜索条件
+              </button>
+              <button @click="showCreateModal = true" class="btn btn-secondary">
+                创建新组织
+              </button>
+            </div>
+          </template>
+          <template v-else>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">暂无组织</h3>
+            <p class="mt-1 text-sm text-gray-500">创建您的第一个组织开始管理项目</p>
+            <div class="mt-6">
+              <button @click="showCreateModal = true" class="btn btn-primary">
+                创建组织
+              </button>
+            </div>
+          </template>
         </div>
       </div>
     </main>
@@ -269,14 +395,183 @@
         </div>
       </div>
     </div>
+
+    <!-- 用户信息查询模态框 -->
+    <div v-if="showUserInfoModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-lg max-w-md w-full p-6">
+        <h3 class="text-lg font-semibold mb-4">查询用户信息</h3>
+        
+        <form @submit.prevent="fetchUserInfo">
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">查询方式</label>
+              <div class="space-y-3">
+                <div class="flex items-center">
+                  <input type="radio" id="queryByEmail" v-model="queryMethod" value="email" class="mr-2">
+                  <label for="queryByEmail" class="text-sm">通过邮箱查询</label>
+                </div>
+                <div class="flex items-center">
+                  <input type="radio" id="queryById" v-model="queryMethod" value="id" class="mr-2">
+                  <label for="queryById" class="text-sm">通过用户ID查询 (ID: 125)</label>
+                </div>
+              </div>
+            </div>
+            
+            <div v-if="queryMethod === 'email'">
+              <label class="block text-sm font-medium text-gray-700 mb-1">用户邮箱</label>
+              <input
+                v-model="userEmail"
+                type="email"
+                required
+                class="input"
+                placeholder="请输入用户邮箱"
+              />
+            </div>
+            
+            <div v-if="queryMethod === 'id'">
+              <label class="block text-sm font-medium text-gray-700 mb-1">用户ID</label>
+              <input
+                value="125"
+                type="text"
+                readonly
+                class="input bg-gray-100"
+              />
+            </div>
+          </div>
+
+          <div v-if="userInfoError" class="text-red-600 text-sm mt-2">
+            {{ userInfoError }}
+          </div>
+
+          <!-- 用户信息显示区域 -->
+          <div v-if="currentUser" class="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h4 class="font-semibold text-gray-900 mb-3">用户信息</h4>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between">
+                <span class="text-gray-600">用户ID:</span>
+                <span class="font-medium">{{ currentUser.id }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600">显示名称:</span>
+                <span class="font-medium">{{ currentUser.display_name }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600">邮箱:</span>
+                <span class="font-medium">{{ currentUser.email }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600">角色:</span>
+                <span class="font-medium">{{ currentUser.role }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600">状态:</span>
+                <span :class="currentUser.is_active ? 'text-green-600' : 'text-gray-600'" class="font-medium">
+                  {{ currentUser.is_active ? '活跃' : '已停用' }}
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600">创建时间:</span>
+                <span class="font-medium">{{ formatDate(currentUser.created_at) }}</span>
+              </div>
+            </div>
+            
+            <!-- 加载用户组织按钮 -->
+            <div class="mt-4">
+              <button 
+                @click="loadUserOrganizations" 
+                class="btn btn-primary w-full"
+                :disabled="!currentUser"
+              >
+                加载该用户的组织数据
+              </button>
+            </div>
+          </div>
+
+          <div class="flex justify-end space-x-3 mt-6">
+            <button
+              type="button"
+              @click="closeUserInfoModal"
+              class="btn btn-secondary"
+            >
+              关闭
+            </button>
+            <button
+              type="submit"
+              :disabled="isFetchingUser"
+              class="btn btn-primary"
+            >
+              {{ isFetchingUser ? '查询中...' : '查询用户' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
+<style scoped>
+/* 按钮样式 */
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium text-sm transition-colors duration-200;
+}
+
+.btn-primary {
+  @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-2 focus:ring-gray-500 focus:outline-none;
+}
+
+.btn-outline {
+  @apply border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-gray-500 focus:outline-none;
+}
+
+.btn-danger {
+  @apply bg-red-600 text-white hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:outline-none;
+}
+
+/* 输入框样式 */
+.input {
+  @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition-colors duration-200;
+}
+
+/* 卡片样式 */
+.card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200;
+}
+
+/* 状态标签 */
+.status-badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.status-active {
+  @apply bg-green-100 text-green-800;
+}
+
+.status-inactive {
+  @apply bg-gray-100 text-gray-800;
+}
+
+/* 自定义动画 */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+</style>
+
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useOrganizationStore } from '@/stores/organization'
+import { UserService, OrganizationService } from '@/lib/database'
+import { supabase } from '@/lib/supabase'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -286,13 +581,121 @@ const { organizations, isLoading } = organizationStore
 const showCreateModal = ref(false)
 const showEditModal = ref(false)
 const showDeleteConfirm = ref(false)
+const showUserInfoModal = ref(false)
 const isCreating = ref(false)
 const isEditing = ref(false)
 const isDeleting = ref(false)
+const isFetchingUser = ref(false)
 const createError = ref('')
 const editError = ref('')
 const deleteError = ref('')
+const userInfoError = ref('')
 const activeMenu = ref<number | null>(null)
+
+// 用户信息相关变量
+const userEmail = ref('')
+const queryMethod = ref<'email' | 'id'>('email')
+const currentUser = ref<any>(null)
+const userInfo = ref({
+  id: null as number | null,
+  display_name: '',
+  email: '',
+  role: '',
+  is_active: false,
+  created_at: ''
+})
+
+// 新增组织相关变量
+const showUserInfoBtn = ref(true) // 控制用户信息按钮显示
+
+// 搜索和过滤相关变量
+const searchQuery = ref('')
+const statusFilter = ref('all') // 'all', 'active', 'inactive'
+const sortBy = ref('created_at') // 'created_at', 'name', 'project_count', 'member_count'
+const sortOrder = ref('desc') // 'asc', 'desc'
+
+// 计算属性：过滤后的组织列表
+const filteredOrganizations = computed(() => {
+  // 确保organizations.value是数组，如果为undefined则使用空数组
+  let filtered = organizations.value || []
+
+  // 根据搜索关键词过滤
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    filtered = filtered.filter(org => 
+      org.name.toLowerCase().includes(query) ||
+      (org.description && org.description.toLowerCase().includes(query))
+    )
+  }
+
+  // 根据状态过滤
+  if (statusFilter.value !== 'all') {
+    filtered = filtered.filter(org => 
+      statusFilter.value === 'active' ? org.is_active : !org.is_active
+    )
+  }
+
+  return filtered
+})
+
+// 计算属性：排序后的组织列表
+const sortedOrganizations = computed(() => {
+  const filtered = filteredOrganizations.value
+
+  if (!filtered || filtered.length === 0) return []
+
+  // 创建排序副本
+  const sorted = [...filtered]
+
+  // 根据选择的排序字段和顺序进行排序
+  sorted.sort((a, b) => {
+    let valueA: any, valueB: any
+
+    switch (sortBy.value) {
+      case 'name':
+        valueA = a.name.toLowerCase()
+        valueB = b.name.toLowerCase()
+        break
+      case 'project_count':
+        valueA = a.project_count || 0
+        valueB = b.project_count || 0
+        break
+      case 'member_count':
+        valueA = a.member_count || 1
+        valueB = b.member_count || 1
+        break
+      case 'created_at':
+      default:
+        valueA = new Date(a.created_at).getTime()
+        valueB = new Date(b.created_at).getTime()
+        break
+    }
+
+    // 根据排序顺序调整比较结果
+    if (valueA < valueB) {
+      return sortOrder.value === 'desc' ? 1 : -1
+    }
+    if (valueA > valueB) {
+      return sortOrder.value === 'desc' ? -1 : 1
+    }
+    return 0
+  })
+
+  return sorted
+})
+
+// 计算属性：是否有活跃的筛选条件
+const hasActiveFilters = computed(() => {
+  return searchQuery.value !== '' || statusFilter.value !== 'all'
+})
+
+// 清除所有筛选条件
+function clearFilters() {
+  searchQuery.value = ''
+  statusFilter.value = 'all'
+  sortBy.value = 'created_at'
+  sortOrder.value = 'desc'
+}
 
 const newOrg = reactive({
   name: '',
@@ -307,38 +710,48 @@ const editOrg = reactive({
 
 const deleteOrg = ref<any>(null)
 
-function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString('zh-CN')
-}
-
-// 跳转到组织详情页面
-function goToOrganizationDetail(orgId: number) {
-  router.push(`/organizations/${orgId}`)
-}
-
-// 退出登录
-async function logout() {
+// 加载所有组织数据
+async function loadAllOrganizations() {
   try {
-    await authStore.logout()
-    router.push('/login')
+    console.log('🔄 开始加载所有组织数据...')
+    await organizationStore.fetchAllOrganizations()
+    console.log('✅ 所有组织数据加载完成，数量:', organizationStore.organizations ? organizationStore.organizations.length : 0)
   } catch (error) {
-    console.error('Logout error:', error)
+    console.error('❌ 加载所有组织数据失败:', error)
   }
 }
 
-// 切换菜单显示
-function toggleMenu(orgId: number) {
-  if (activeMenu.value === orgId) {
-    activeMenu.value = null
-  } else {
-    activeMenu.value = orgId
+// 创建组织
+async function createOrganization() {
+  if (!newOrg.name.trim()) {
+    createError.value = '组织名称不能为空'
+    return
+  }
+
+  isCreating.value = true
+  createError.value = ''
+
+  try {
+    await organizationStore.createOrganization({
+      name: newOrg.name.trim(),
+      description: newOrg.description.trim(),
+      owner_id: 125 // 使用固定的用户ID
+    })
+
+    // 重置表单
+    newOrg.name = ''
+    newOrg.description = ''
+    showCreateModal.value = false
+
+    // 显示成功消息
+    console.log('✅ 组织创建成功')
+  } catch (error: any) {
+    createError.value = error.message || '创建组织失败'
+    console.error('❌ 创建组织失败:', error)
+  } finally {
+    isCreating.value = false
   }
 }
-
-// 点击页面其他地方关闭菜单
-document.addEventListener('click', () => {
-  activeMenu.value = null
-})
 
 // 编辑组织
 function editOrganization(org: any) {
@@ -370,13 +783,7 @@ async function updateOrganization() {
     showEditModal.value = false
     
     // 重新加载组织数据
-    const authUserId = authStore.user?.id
-    if (authUserId) {
-      const userRecord = await getUserRecordWithCache(authUserId)
-      if (userRecord?.id) {
-        await organizationStore.fetchOrganizations(userRecord.id)
-      }
-    }
+    await organizationStore.fetchOrganizations(125)
   } catch (error: any) {
     console.error('❌ 更新组织失败:', error)
     editError.value = error.message || '更新组织失败，请检查网络连接'
@@ -397,13 +804,7 @@ async function toggleOrganizationStatus(org: any) {
     console.log('✅ 组织状态更新成功')
     
     // 重新加载组织数据
-    const authUserId = authStore.user?.id
-    if (authUserId) {
-      const userRecord = await getUserRecordWithCache(authUserId)
-      if (userRecord?.id) {
-        await organizationStore.fetchOrganizations(userRecord.id)
-      }
-    }
+    await organizationStore.fetchOrganizations(125)
   } catch (error: any) {
     console.error('❌ 更新组织状态失败:', error)
     alert('更新组织状态失败: ' + (error.message || '未知错误'))
@@ -432,13 +833,7 @@ async function confirmDelete() {
     showDeleteConfirm.value = false
     
     // 重新加载组织数据
-    const authUserId = authStore.user?.id
-    if (authUserId) {
-      const userRecord = await getUserRecordWithCache(authUserId)
-      if (userRecord?.id) {
-        await organizationStore.fetchOrganizations(userRecord.id)
-      }
-    }
+    await organizationStore.fetchOrganizations(125)
   } catch (error: any) {
     console.error('❌ 删除组织失败:', error)
     deleteError.value = error.message || '删除组织失败，请检查网络连接'
@@ -447,154 +842,251 @@ async function confirmDelete() {
   }
 }
 
-async function createOrganization() {
-  if (!newOrg.name.trim()) {
-    createError.value = '请输入组织名称'
+// 跳转到组织详情页面
+function goToOrganizationDetail(orgId: number) {
+  console.log('🔍 跳转到组织详情，组织ID:', orgId)
+  
+  // 验证组织ID是否有效
+  if (!orgId || isNaN(orgId)) {
+    console.error('❌ 无效的组织ID:', orgId)
+    // 显示错误提示
+    globalError.value = '无效的组织ID，无法跳转到详情页面'
     return
   }
-
-  isCreating.value = true
-  createError.value = ''
-
+  
   try {
-    console.log('📝 开始创建组织流程...')
+    // 查找对应的组织信息，确保组织存在
+    const org = organizations.value?.find(o => o.id === orgId)
+    if (!org) {
+      console.warn('⚠️ 组织不在当前列表中，但仍尝试跳转，组织ID:', orgId)
+      // 可以尝试从数据库加载，但这里先直接跳转
+    }
     
-    // 直接使用数据库用户ID 125
-    const userId = 125
-    console.log('👤 直接使用数据库用户ID:', userId)
-
-    // 创建组织
-    const newOrganization = await organizationStore.createOrganization({
-      name: newOrg.name,
-      description: newOrg.description,
-      owner_id: userId
+    // 使用导航守卫确保路由参数正确传递
+    router.push({
+      name: 'organization-detail',
+      params: { 
+        id: orgId.toString() 
+      }
     })
     
-    console.log('✅ 组织创建成功:', newOrganization)
-    
-    showCreateModal.value = false
-    newOrg.name = ''
-    newOrg.description = ''
-    
-    // 重新加载组织数据，也使用ID 125
-    await organizationStore.fetchOrganizations(userId)
-    
-    console.log('🔄 组织数据重新加载完成')
-  } catch (error: any) {
-    console.error('❌ 创建组织失败:', error)
-    
-    // 提供更详细的错误信息
-    if (error.message?.includes('foreign key constraint')) {
-      createError.value = '创建组织失败：用户ID 125不存在或外键约束失败。请确保数据库中存在ID为125的用户。'
-    } else if (error.message?.includes('duplicate key')) {
-      createError.value = '创建组织失败：组织名称已存在。请使用不同的名称。'
-    } else {
-      createError.value = error.message || '创建组织失败，请检查网络连接或数据库状态'
-    }
-  } finally {
-    isCreating.value = false
+  } catch (error) {
+    console.error('❌ 跳转到组织详情失败:', error)
+    globalError.value = '跳转到组织详情失败，请稍后重试'
   }
 }
 
-onMounted(async () => {
-  await loadOrganizations()
-})
+// 切换菜单显示
+function toggleMenu(orgId: number) {
+  if (activeMenu.value === orgId) {
+    activeMenu.value = null
+  } else {
+    activeMenu.value = orgId
+  }
+}
 
-// 加载组织数据
-async function loadOrganizations() {
+// 点击页面其他地方关闭菜单
+const handleDocumentClick = () => {
+  activeMenu.value = null
+}
+
+// 页面加载时自动加载组织数据
+onMounted(async () => {
+  document.addEventListener('click', handleDocumentClick)
+  
   try {
-    console.log('🔍 开始加载组织数据...')
-    
-    // 直接使用数据库用户ID 125加载组织数据
-    console.log('👤 直接使用数据库用户ID 125')
-    await organizationStore.fetchOrganizations(125)
-    
-    console.log('✅ 组织数据加载完成，数量:', organizationStore.organizations.length)
-    
-    // 如果没有组织，显示创建组织的提示
-    if (organizationStore.organizations.length === 0) {
-      console.log('📝 用户暂无组织，显示创建提示')
+    // 检查认证状态
+    if (!authStore.isAuthenticated) {
+      console.warn('用户未认证，跳转到登录页面')
+      router.push('/login')
+      return
     }
+    
+    console.log('🚀 页面加载，开始加载组织数据...')
+    
+    // 首先尝试直接加载所有组织数据
+    try {
+      console.log('🔄 尝试直接加载所有组织数据...')
+      await loadAllOrganizationsDirect()
+      
+      // 如果直接加载没有数据，再尝试使用store加载
+      if (!organizations.value || organizations.value.length === 0) {
+        console.log('🔄 直接加载无数据，尝试使用store加载...')
+        await organizationStore.fetchAllOrganizations()
+      }
+      
+      console.log('✅ 组织数据加载完成，数量:', organizations.value.length)
+    } catch (error) {
+      console.error('❌ 加载组织数据失败:', error)
+    }
+    
+    // 检查是否有数据，如果没有则显示空状态
+    if (!organizations.value || organizations.value.length === 0) {
+      console.log('📊 数据库中没有组织数据，将显示空状态')
+      // 确保使用空数组而不是示例数据
+      organizations.value = []
+    } else {
+      console.log('✅ 组织数据加载成功，数量:', organizations.value.length)
+    }
+    
   } catch (error) {
     console.error('❌ 加载组织数据失败:', error)
-    
-    // 如果直接使用ID 125失败，尝试备用方案
-    console.log('🔄 尝试使用认证用户ID作为备用方案')
-    const authUserId = authStore.user?.id
-    if (authUserId) {
-      try {
-        const fallbackUser = await getUserRecordWithCache(authUserId)
-        if (fallbackUser && fallbackUser.id) {
-          await organizationStore.fetchOrganizations(fallbackUser.id)
-        }
-      } catch (fallbackError) {
-        console.error('❌ 备用方案也失败:', fallbackError)
-      }
-    }
+    console.log('📊 将显示空列表作为替代')
+    // 出错时使用空数组，而不是示例数据
+    organizations.value = []
+  }
+})
+
+// 清理事件监听器
+onUnmounted(() => {
+  document.removeEventListener('click', handleDocumentClick)
+})
+
+// 格式化日期
+function formatDate(dateString: string) {
+  try {
+    if (!dateString) return '--'
+    const date = new Date(dateString)
+    return isNaN(date.getTime()) ? '--' : date.toLocaleDateString('zh-CN')
+  } catch (error) {
+    console.error('❌ 日期格式化错误:', error, '日期字符串:', dateString)
+    return '--'
   }
 }
 
-// 带缓存的用户记录获取
-let userRecordCache: any = null
-let cacheTimestamp = 0
-const CACHE_DURATION = 5 * 60 * 1000 // 5分钟缓存
-
-async function getUserRecordWithCache(authUserId: string) {
-  // 检查缓存
-  const now = Date.now()
-  if (userRecordCache && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log('📦 使用缓存的用户记录')
-    return userRecordCache
+// 直接加载用户ID 125的组织数据
+async function loadUser125Organizations() {
+  try {
+    console.log('🔄 开始加载用户ID 125的组织数据')
+    await organizationStore.fetchOrganizations(125)
+    console.log('✅ 用户ID 125的组织数据加载完成')
+  } catch (error: any) {
+    console.error('❌ 加载用户ID 125的组织数据失败:', error)
+    // 出错时仍然显示友好提示
   }
+}
+
+// 直接加载所有组织数据（跳过Store）
+async function loadAllOrganizationsDirect() {
+  try {
+    console.log('🔄 开始直接加载所有组织数据')
+    const { data, error } = await supabase
+      .from('organizations')
+      .select('*')
+      .order('created_at', { ascending: false })
+    
+    if (error) {
+      console.error('❌ 直接查询组织数据失败:', error)
+      return
+    }
+    
+    if (data && data.length > 0) {
+      console.log(`✅ 直接查询到 ${data.length} 条组织数据`)
+      
+      // 为每个组织统计实际的项目数量
+      const organizationsWithProjectCount = await Promise.all(
+        data.map(async (org) => {
+          // 查询该组织下的项目数量
+          const { data: projects, error: projectsError } = await supabase
+            .from('projects')
+            .select('id', { count: 'exact' })
+            .eq('organization_id', org.id)
+          
+          let actualProjectCount = 0
+          if (!projectsError && projects) {
+            actualProjectCount = projects.length
+          } else {
+            // 如果查询失败，使用数据库中的字段值
+            actualProjectCount = org.project_count || 0
+          }
+          
+          return {
+            id: org.id,
+            name: org.name,
+            description: org.description || '暂无描述',
+            project_count: actualProjectCount,
+            member_count: org.member_count || 0,
+            is_active: org.is_active ?? true,
+            created_at: org.created_at,
+            updated_at: org.updated_at
+          }
+        })
+      )
+      
+      organizations.value = organizationsWithProjectCount
+      console.log(`✅ 组织数据加载完成，包含项目数量统计`)
+    } else {
+      console.log('📊 数据库中暂无组织数据')
+      organizations.value = []
+    }
+  } catch (error) {
+    console.error('❌ 直接加载组织数据失败:', error)
+  }
+}
+
+// 查询用户信息
+async function fetchUserInfo() {
+  isFetchingUser.value = true
+  userInfoError.value = ''
+  currentUser.value = null
 
   try {
-    // 根据Auth用户ID查找对应的users表记录
-    const { UserService } = await import('@/lib/database')
-    const userRecord = await UserService.getUserByAuthId(authUserId)
+    let userData: any = null
     
-    if (userRecord) {
-      // 更新缓存
-      userRecordCache = userRecord
-      cacheTimestamp = now
-      return userRecord
-    }
-
-    // 如果用户记录不存在，自动创建用户记录
-    console.log('用户记录不存在，自动创建用户记录')
-    
-    // 获取用户邮箱
-    const userEmail = authStore.user?.email || `user_${Date.now()}@example.com`
-    const displayName = authStore.user?.user_metadata?.name || userEmail.split('@')[0] || '用户'
-    
-    // 创建用户记录
-    const newUserRecord = await UserService.createUser({
-      auth_id: authUserId,
-      email: userEmail,
-      display_name: displayName,
-      role: 'member',
-      is_active: true
-    })
-    
-    // 更新缓存
-    userRecordCache = newUserRecord
-    cacheTimestamp = now
-    
-    return newUserRecord
-  } catch (error) {
-    console.error('获取用户记录失败:', error)
-    
-    // 返回默认用户对象作为降级方案
-    const defaultUser = {
-      id: Date.now(), // 临时ID
-      email: authStore.user?.email || `user_${Date.now()}@example.com`,
-      display_name: authStore.user?.user_metadata?.name || '用户',
-      role: 'member',
-      is_active: true
+    if (queryMethod.value === 'email') {
+      if (!userEmail.value.trim()) {
+        userInfoError.value = '请输入邮箱地址'
+        return
+      }
+      userData = await UserService.getUserByEmail(userEmail.value.trim())
+    } else {
+      // 使用固定用户ID 125
+      userData = await UserService.getUserById(125)
     }
     
-    userRecordCache = defaultUser
-    cacheTimestamp = now
-    return defaultUser
+    if (!userData) {
+      userInfoError.value = '用户不存在'
+      return
+    }
+    
+    currentUser.value = userData
+    console.log('✅ 用户信息查询成功:', userData)
+  } catch (error: any) {
+    console.error('❌ 查询用户信息失败:', error)
+    userInfoError.value = error.message || '查询用户信息失败'
+  } finally {
+    isFetchingUser.value = false
   }
+}
+
+// 加载用户组织数据
+async function loadUserOrganizations() {
+  if (!currentUser.value) return
+
+  try {
+    console.log('🔄 开始加载用户组织数据，用户ID:', currentUser.value.id)
+    await organizationStore.fetchOrganizations(currentUser.value.id)
+    console.log('✅ 用户组织数据加载完成')
+    
+    // 关闭用户信息模态框
+    closeUserInfoModal()
+  } catch (error: any) {
+    console.error('❌ 加载用户组织数据失败:', error)
+    alert('加载组织数据失败: ' + (error.message || '未知错误'))
+  }
+}
+
+// 关闭用户信息模态框
+function closeUserInfoModal() {
+  showUserInfoModal.value = false
+  currentUser.value = null
+  userEmail.value = ''
+  userInfoError.value = ''
+}
+
+// 退出登录
+function logout() {
+  authStore.logout()
+  router.push('/login')
 }
 </script>

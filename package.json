@@ -17,6 +17,7 @@
     "@vueuse/core": "^10.7.0",
     "axios": "^1.6.0",
     "dotenv": "^17.2.3",
+    "kill-port": "^2.0.1",
     "pinia": "^2.1.0",
     "vue": "^3.4.0",
     "vue-router": "^4.2.0"

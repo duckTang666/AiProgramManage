@@ -28,6 +28,22 @@ export const useOrganizationStore = defineStore('organization', () => {
     }
   }
 
+  // 获取所有组织（直接从数据库获取）
+  async function fetchAllOrganizations() {
+    isLoading.value = true
+    try {
+      console.log('🔄 开始加载所有组织数据...')
+      const data = await OrganizationService.getAllOrganizations()
+      organizations.value = data || []
+      console.log('✅ 所有组织数据加载完成，数量:', organizations.value.length)
+    } catch (error) {
+      console.error('❌ 加载所有组织数据失败:', error)
+      organizations.value = []
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   async function createOrganization(orgData: { name: string; description?: string; owner_id: number }) {
     try {
       console.log('📝 开始创建组织:', orgData)
@@ -105,6 +121,7 @@ export const useOrganizationStore = defineStore('organization', () => {
     currentOrganization,
     isLoading,
     fetchOrganizations,
+    fetchAllOrganizations,
     createOrganization,
     fetchOrganizationById,
     updateOrganization,

@@ -19,13 +19,15 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true,
+    // 强制使用指定端口，不自动切换
+    strictPort: true,
     // 优化开发服务器性能
     hmr: {
       overlay: false
     },
-    // 添加静态资源处理，避免400错误
+    // 添加静态资源处理，避免依赖扫描错误
     fs: {
-      allow: ['..']
+      allow: ['..', __dirname]
     }
   },
   build: {
@@ -46,9 +48,15 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     assetsInlineLimit: 4096
   },
-  // 优化预构建
+  // 优化预构建，修复依赖扫描错误
   optimizeDeps: {
     include: ['vue', 'vue-router', 'pinia', '@supabase/supabase-js'],
-    exclude: []
+    exclude: [],
+    // 强制预构建依赖
+    force: true
+  },
+  // 解决依赖扫描错误
+  esbuild: {
+    target: 'esnext'
   }
 })

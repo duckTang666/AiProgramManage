@@ -1,5 +1,9 @@
 import { supabase } from './supabase'
+import { MockDataService, mockUsers, mockOrganizations, mockProjects } from './mock-data'
 import type { Task, User, Organization, Project, ProjectMember, ChatMessage } from '@/types'
+
+// 检查是否启用模拟数据模式
+const useMockData = import.meta.env.VITE_USE_MOCK_DATA === 'true'
 
 // 用户服务
 export class UserService {
@@ -51,6 +55,78 @@ export class UserService {
     } catch (error) {
       console.error('Error fetching user by auth_id:', error)
       return null
+    }
+  }
+
+  // 通过用户ID或邮箱来加载用户
+  static async getUserByIdentifier(identifier: string | number): Promise<User | null> {
+    try {
+      console.log('🔍 通过标识符加载用户:', identifier)
+      
+      // 判断标识符类型
+      if (typeof identifier === 'number') {
+        // 如果是数字，按ID查询
+        return await this.getUserById(identifier)
+      } else if (typeof identifier === 'string') {
+        // 如果是字符串，检查是否是邮箱格式
+        if (identifier.includes('@')) {
+          // 包含@符号，按邮箱查询
+          return await this.getUserByEmail(identifier)
+        } else {
+          // 尝试按ID查询（字符串转数字）
+          const id = parseInt(identifier)
+          if (!isNaN(id)) {
+            return await this.getUserById(id)
+          }
+        }
+      }
+      
+      console.error('❌ 无效的用户标识符:', identifier)
+      return null
+    } catch (error) {
+      console.error('❌ 通过标识符加载用户失败:', error)
+      return null
+    }
+  }
+
+  // 搜索用户（支持模糊匹配）
+  static async searchUsers(query: string, limit: number = 10): Promise<User[]> {
+    try {
+      console.log('🔍 搜索用户，查询条件:', query)
+      
+      let queryBuilder = supabase
+        .from('users')
+        .select('*')
+        .limit(limit)
+      
+      // 如果查询条件包含数字，尝试按ID搜索
+      if (/\d+/.test(query)) {
+        const id = parseInt(query)
+        if (!isNaN(id)) {
+          queryBuilder = queryBuilder.eq('id', id)
+        }
+      }
+      
+      // 如果查询条件包含@符号，尝试按邮箱搜索
+      if (query.includes('@')) {
+        queryBuilder = queryBuilder.ilike('email', `%${query}%`)
+      }
+      
+      // 按用户名搜索（模糊匹配）
+      queryBuilder = queryBuilder.or(`display_name.ilike.%${query}%,email.ilike.%${query}%`)
+      
+      const { data, error } = await queryBuilder
+      
+      if (error) {
+        console.error('搜索用户失败:', error)
+        return []
+      }
+      
+      console.log('✅ 搜索到用户数量:', data?.length || 0)
+      return data || []
+    } catch (error) {
+      console.error('搜索用户时发生错误:', error)
+      return []
     }
   }
 
@@ -135,13 +211,15 @@ export class OrganizationService {
       }
       
       // 合并结果并去重
-      const allOrgs = []
+      const allOrgs: any[] = []
       
-      if (ownedOrgs) {
+      if (ownedOrgs && ownedOrgs.length > 0) {
+        console.log('✅ 查询到用户拥有的组织:', ownedOrgs.length)
         allOrgs.push(...ownedOrgs)
       }
       
-      if (memberOrgs) {
+      if (memberOrgs && memberOrgs.length > 0) {
+        console.log('✅ 查询到用户作为成员的组织:', memberOrgs.length)
         const memberOrgList = memberOrgs
           .filter(item => item.organization)
           .map(item => item.organization)
@@ -153,7 +231,13 @@ export class OrganizationService {
         index === self.findIndex(o => o.id === org.id)
       )
       
-      console.log('✅ 查询到的组织数量:', uniqueOrgs.length)
+      console.log('✅ 合并去重后的组织数量:', uniqueOrgs.length)
+      
+      if (uniqueOrgs.length === 0) {
+        console.log('⚠️ 未找到任何组织，返回空数组')
+        // 如果没有找到组织，返回空数组而不是示例数据
+        return []
+      }
       
       // 为每个组织获取统计信息
       const orgsWithStats = await Promise.all(
@@ -187,11 +271,134 @@ export class OrganizationService {
         })
       )
       
+      console.log('✅ 最终返回的组织数量:', orgsWithStats.length)
       return orgsWithStats
     } catch (error) {
       console.error('Error fetching user organizations:', error)
+      // 出错时返回空数组，不使用示例数据
       return []
     }
+  }
+
+  // 生成示例组织数据
+  static async generateSampleOrganizations(userId: number | string): Promise<Organization[]> {
+    console.log('📝 生成示例组织数据...')
+    
+    const sampleOrganizations = [
+      {
+        id: 1,
+        name: '大数据分析中心',
+        description: '专注于大数据技术和分析解决方案',
+        owner_id: userId,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        project_count: 3,
+        member_count: 12
+      },
+      {
+        id: 2,
+        name: '区块链技术团队',
+        description: '区块链技术研发和应用探索',
+        owner_id: userId,
+        is_active: true,
+        created_at: new Date(Date.now() - 86400000).toISOString(),
+        updated_at: new Date().toISOString(),
+        project_count: 2,
+        member_count: 8
+      },
+      {
+        id: 3,
+        name: '人工智能研究院',
+        description: 'AI技术研究和产品开发',
+        owner_id: userId,
+        is_active: true,
+        created_at: new Date(Date.now() - 172800000).toISOString(),
+        updated_at: new Date().toISOString(),
+        project_count: 5,
+        member_count: 15
+      },
+      {
+        id: 4,
+        name: '后端架构组织',
+        description: '系统架构和后端服务开发',
+        owner_id: userId,
+        is_active: true,
+        created_at: new Date(Date.now() - 259200000).toISOString(),
+        updated_at: new Date().toISOString(),
+        project_count: 4,
+        member_count: 10
+      },
+      {
+        id: 5,
+        name: '前端开发组织',
+        description: '前端技术研究和用户界面开发',
+        owner_id: userId,
+        is_active: true,
+        created_at: new Date(Date.now() - 345600000).toISOString(),
+        updated_at: new Date().toISOString(),
+        project_count: 6,
+        member_count: 18
+      },
+      {
+        id: 6,
+        name: '默认组织',
+        description: '系统默认组织',
+        owner_id: userId,
+        is_active: true,
+        created_at: new Date(Date.now() - 432000000).toISOString(),
+        updated_at: new Date().toISOString(),
+        project_count: 1,
+        member_count: 3
+      },
+      {
+        id: 7,
+        name: '物联网创新实验室',
+        description: '物联网技术研究和产品开发',
+        owner_id: userId,
+        is_active: true,
+        created_at: new Date(Date.now() - 518400000).toISOString(),
+        updated_at: new Date().toISOString(),
+        project_count: 2,
+        member_count: 9
+      },
+      {
+        id: 8,
+        name: '云计算事业部',
+        description: '云服务和基础设施管理',
+        owner_id: userId,
+        is_active: true,
+        created_at: new Date(Date.now() - 604800000).toISOString(),
+        updated_at: new Date().toISOString(),
+        project_count: 7,
+        member_count: 20
+      },
+      {
+        id: 9,
+        name: '系统运维组织',
+        description: '系统运维和监控管理',
+        owner_id: userId,
+        is_active: true,
+        created_at: new Date(Date.now() - 691200000).toISOString(),
+        updated_at: new Date().toISOString(),
+        project_count: 2,
+        member_count: 6
+      },
+      {
+        id: 10,
+        name: '智能开发组织',
+        description: '智能化开发工具和流程优化',
+        owner_id: userId,
+        is_active: true,
+        created_at: new Date(Date.now() - 777600000).toISOString(),
+        updated_at: new Date().toISOString(),
+        project_count: 4,
+        member_count: 11
+      }
+    ]
+    
+    console.log('✅ 示例组织数据生成完成，数量:', sampleOrganizations.length)
+    return sampleOrganizations
   }
 
   // 创建组织
@@ -245,17 +452,104 @@ export class OrganizationService {
   // 获取组织详情
   static async getOrganizationById(orgId: number): Promise<Organization | null> {
     try {
+      console.log('🔍 查询组织详情，组织ID:', orgId)
+      
       const { data, error } = await supabase
         .from('organizations')
         .select('*')
         .eq('id', orgId)
         .single()
       
-      if (error) throw error
+      if (error) {
+        console.error('❌ 查询组织详情失败:', error)
+        
+        // 特殊处理组织不存在的情况
+        if (error.code === 'PGRST116' || error.message?.includes('Cannot coerce the result to a single JSON object')) {
+          console.log('ℹ️ 组织不存在，返回 null')
+          return null
+        }
+        
+        throw error
+      }
+      
+      console.log('✅ 组织详情查询成功')
       return data
     } catch (error) {
-      console.error('Error fetching organization:', error)
+      console.error('❌ 获取组织详情失败:', error)
+      
+      // 如果是网络连接错误，记录但不抛出
+      if (error.message?.includes('net::ERR_NAME_NOT_RESOLVED') || 
+          error.message?.includes('Failed to fetch') ||
+          error.message?.includes('网络连接错误')) {
+        console.error('⚠️ 网络连接失败，请检查网络或服务器状态')
+        return null
+      }
+      
       return null
+    }
+  }
+
+  // 获取所有组织（直接从organizations表获取）
+  static async getAllOrganizations(): Promise<Organization[]> {
+    try {
+      console.log('🔍 从数据库获取所有组织数据...')
+      
+      const { data, error } = await supabase
+        .from('organizations')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        console.error('❌ 获取所有组织数据失败:', error)
+        throw error
+      }
+      
+      console.log('✅ 从数据库获取到组织数据数量:', data?.length || 0)
+      
+      // 如果没有数据，返回空数组而不是示例数据
+      if (!data || data.length === 0) {
+        console.log('ℹ️ 数据库中没有组织数据')
+        return []
+      }
+      
+      // 为每个组织获取统计信息
+      const orgsWithStats = await Promise.all(
+        data.map(async (org) => {
+          try {
+            // 获取项目数量
+            const { count: projectCount, error: projectError } = await supabase
+              .from('projects')
+              .select('*', { count: 'exact', head: true })
+              .eq('organization_id', org.id)
+            
+            // 获取成员数量
+            const { count: memberCount, error: memberError } = await supabase
+              .from('organization_members')
+              .select('*', { count: 'exact', head: true })
+              .eq('organization_id', org.id)
+            
+            return {
+              ...org,
+              project_count: projectError ? 0 : projectCount || 0,
+              member_count: memberError ? 1 : (memberCount || 0) + 1 // 包含创建者
+            }
+          } catch (error) {
+            console.error(`获取组织 ${org.id} 统计信息失败:`, error)
+            return {
+              ...org,
+              project_count: 0,
+              member_count: 1
+            }
+          }
+        })
+      )
+      
+      console.log('✅ 最终返回的组织数量:', orgsWithStats.length)
+      return orgsWithStats
+    } catch (error) {
+      console.error('❌ 获取所有组织数据失败:', error)
+      // 出错时抛出错误，让调用方处理
+      throw error
     }
   }
 
@@ -398,6 +692,41 @@ export class ProjectService {
       return data
     } catch (error) {
       console.error('Error updating project:', error)
+      throw error
+    }
+  }
+
+  // 删除项目
+  static async deleteProject(projectId: number): Promise<boolean> {
+    try {
+      // 首先删除项目关联的所有任务
+      const { error: tasksError } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('project_id', projectId)
+      
+      if (tasksError) throw tasksError
+
+      // 然后删除项目成员
+      const { error: membersError } = await supabase
+        .from('project_members')
+        .delete()
+        .eq('project_id', projectId)
+      
+      if (membersError) throw membersError
+
+      // 最后删除项目本身
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', projectId)
+      
+      if (error) throw error
+      
+      console.log('✅ 项目删除成功')
+      return true
+    } catch (error) {
+      console.error('❌ 删除项目失败:', error)
       throw error
     }
   }
@@ -916,14 +1245,33 @@ export class TaskService {
     completionRate: number
   }> {
     try {
+      // 检查projectId是否为有效数字
+      if (!projectId || isNaN(projectId) || !Number.isInteger(projectId)) {
+        console.warn('❌ 无效的projectId:', projectId, '，返回默认统计信息')
+        return {
+          total: 0,
+          pending: 0,
+          inProgress: 0,
+          completed: 0,
+          completionRate: 0
+        }
+      }
+      
+      console.log('📊 获取任务统计信息，projectId:', projectId)
+      
       const { data, error } = await supabase
         .from('tasks')
         .select('status')
         .eq('project_id', projectId)
       
-      if (error) throw error
+      if (error) {
+        console.error('❌ 数据库查询失败:', error)
+        throw error
+      }
       
       const tasks = data || []
+      console.log('✅ 查询到任务数量:', tasks.length)
+      
       const total = tasks.length
       const pending = tasks.filter(t => t.status === 'todo').length
       const inProgress = tasks.filter(t => t.status === 'in_progress').length
@@ -938,7 +1286,7 @@ export class TaskService {
         completionRate
       }
     } catch (error) {
-      console.error('Error fetching task stats:', error)
+      console.error('❌ 获取任务统计信息失败:', error)
       return {
         total: 0,
         pending: 0,

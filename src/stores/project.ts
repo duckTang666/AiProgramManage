@@ -80,6 +80,28 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
+  // 删除项目
+  async function deleteProject(id: number) {
+    try {
+      const success = await ProjectService.deleteProject(id)
+      
+      if (success) {
+        // 从本地列表中移除项目
+        projects.value = projects.value.filter(p => p.id !== id)
+        
+        // 如果当前项目被删除，重置当前项目
+        if (currentProject.value?.id === id) {
+          currentProject.value = null
+        }
+      }
+      
+      return { success }
+    } catch (error) {
+      console.error('Error deleting project:', error)
+      return { success: false, error }
+    }
+  }
+
   return {
     projects,
     currentProject,
@@ -87,6 +109,7 @@ export const useProjectStore = defineStore('project', () => {
     fetchProjects,
     createProject,
     fetchProjectById,
-    updateProject
+    updateProject,
+    deleteProject
   }
 })

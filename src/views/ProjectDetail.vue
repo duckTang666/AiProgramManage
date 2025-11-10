@@ -312,6 +312,16 @@
                     </svg>
                     <span>编辑</span>
                   </button>
+                  <button 
+                    @click="confirmDeleteTask(task)"
+                    class="flex items-center space-x-1 px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                    title="删除任务"
+                  >
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    <span>删除</span>
+                  </button>
                 </div>
               </div>
               
@@ -667,6 +677,90 @@
       </div>
     </div>
 
+    <!-- 删除任务确认模态框 -->
+    <div v-if="showDeleteTaskConfirmModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-lg max-w-md w-full p-6">
+        <div class="flex items-center mb-4">
+          <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mr-3">
+            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-900">确认删除</h3>
+        </div>
+        
+        <p class="text-gray-600 mb-6">
+          确定要删除任务 <span class="font-semibold text-gray-900">"{{ taskToDelete?.title }}"</span> 吗？
+          此操作无法撤销。
+        </p>
+
+        <div v-if="deleteTaskError" class="text-red-600 text-sm mb-4 p-3 bg-red-50 rounded-lg">
+          {{ deleteTaskError }}
+        </div>
+
+        <div class="flex justify-end space-x-3">
+          <button
+            type="button"
+            @click="cancelDeleteTask"
+            :disabled="isDeletingTask"
+            class="btn btn-secondary"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            @click="deleteTask"
+            :disabled="isDeletingTask"
+            class="btn btn-danger"
+          >
+            {{ isDeletingTask ? '删除中...' : '确认删除' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除任务确认模态框 -->
+    <div v-if="showDeleteTaskConfirmModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-lg max-w-md w-full p-6">
+        <div class="flex items-center mb-4">
+          <div class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mr-3">
+            <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-900">确认删除</h3>
+        </div>
+        
+        <p class="text-gray-600 mb-6">
+          确定要删除任务 <span class="font-semibold text-gray-900">"{{ taskToDelete?.title }}"</span> 吗？
+          此操作无法撤销。
+        </p>
+
+        <div v-if="deleteTaskError" class="text-red-600 text-sm mb-4 p-3 bg-red-50 rounded-lg">
+          {{ deleteTaskError }}
+        </div>
+
+        <div class="flex justify-end space-x-3">
+          <button
+            type="button"
+            @click="cancelDeleteTask"
+            :disabled="isDeletingTask"
+            class="btn btn-secondary"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            @click="deleteTask"
+            :disabled="isDeletingTask"
+            class="btn btn-danger"
+          >
+            {{ isDeletingTask ? '删除中...' : '确认删除' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 编辑任务窗体 -->
     <div v-if="showEditTaskModal" class="fixed inset-0 z-50 overflow-hidden">
       <!-- 背景遮罩 -->
@@ -891,6 +985,12 @@ const editTaskStatus = ref('todo')
 const editTaskDueDate = ref('')
 const editTaskError = ref('')
 
+// 任务删除状态
+const showDeleteTaskConfirmModal = ref(false)
+const taskToDelete = ref<Task | null>(null)
+const isDeletingTask = ref(false)
+const deleteTaskError = ref('')
+
 // 任务相关状态
 const tasks = ref<Task[]>([])
 const tasksLoading = ref(false)
@@ -1004,9 +1104,19 @@ function openTaskDetail(task: Task) {
 
 async function fetchTasks() {
   const projectId = parseInt(route.params.id as string)
+  
+  // 检查projectId是否为有效数字
+  if (isNaN(projectId) || projectId <= 0) {
+    console.error('❌ 无效的项目ID:', projectId)
+    tasksLoading.value = false
+    return
+  }
+  
   tasksLoading.value = true
   
   try {
+    console.log('📊 开始获取项目任务，projectId:', projectId)
+    
     const taskList = await TaskService.getTasksByProject(projectId)
     tasks.value = taskList
     
@@ -1017,8 +1127,16 @@ async function fetchTasks() {
     taskStats.inProgress = stats.inProgress
     taskStats.completed = stats.completed
     taskStats.completionRate = stats.completionRate
+    
+    console.log('✅ 任务获取成功，任务数量:', taskList.length, '统计信息:', stats)
   } catch (error) {
-    console.error('Error fetching tasks:', error)
+    console.error('❌ 获取任务失败:', error)
+    // 设置默认的统计信息
+    taskStats.total = 0
+    taskStats.pending = 0
+    taskStats.inProgress = 0
+    taskStats.completed = 0
+    taskStats.completionRate = 0
   } finally {
     tasksLoading.value = false
   }
